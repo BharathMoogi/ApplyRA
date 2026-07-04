@@ -13,7 +13,7 @@ export class GeminiProvider implements AIProvider {
 
   async generateText(options: AIGenerateTextOptions): Promise<AIResponse<string>> {
     const startTime = Date.now();
-    const modelName = options.model || 'gemini-1.5-flash';
+    const modelName = options.model || 'gemini-2.0-flash';
     try {
       const { text } = await generateText({
         model: google(modelName),
@@ -48,7 +48,7 @@ export class GeminiProvider implements AIProvider {
 
   async generateObject<T>(options: AIGenerateObjectOptions): Promise<AIResponse<T>> {
     const startTime = Date.now();
-    const modelName = options.model || 'gemini-1.5-flash';
+    const modelName = options.model || 'gemini-2.0-flash';
     try {
       const { object } = await generateObject({
         model: google(modelName),
@@ -83,7 +83,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   async streamText(options: AIGenerateTextOptions): Promise<AIResponse<AIStreamTextResult>> {
-    const modelName = options.model || 'gemini-1.5-flash';
+    const modelName = options.model || 'gemini-2.0-flash';
     try {
       const result = await streamText({
         model: google(modelName),
