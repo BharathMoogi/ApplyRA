@@ -1,4 +1,5 @@
 import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -12,9 +13,8 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma = new Proxy({} as PrismaClient, {
   get(target, prop, receiver) {
     if (!globalForPrisma.prisma) {
-      globalForPrisma.prisma = new PrismaClient({
-        adapter: null as any,
-      });
+      const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+      globalForPrisma.prisma = new PrismaClient({ adapter });
     }
     return Reflect.get(globalForPrisma.prisma, prop, receiver);
   },

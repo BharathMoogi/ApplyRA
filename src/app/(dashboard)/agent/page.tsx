@@ -38,6 +38,7 @@ export default function AIAgentPage() {
   
   // Settings
   const [roleQuery, setRoleQuery] = useState("Frontend");
+  const [locationQuery, setLocationQuery] = useState("Bangalore");
   const [threshold, setThreshold] = useState(85);
   const [daemonThreshold, setDaemonThreshold] = useState(90); // default 90% required
   
@@ -126,7 +127,7 @@ export default function AIAgentPage() {
 
     try {
       addLog(`[${timeStr()}] [System] Connecting to job boards API...`);
-      const res = await searchJobs(roleQuery, {}, 1, 10);
+      const res = await searchJobs(roleQuery, { location: locationQuery }, 1, 10);
       const jobsToProcess = res.jobs;
 
       if (jobsToProcess.length === 0) {
@@ -206,10 +207,7 @@ export default function AIAgentPage() {
         });
 
         // Populate pipeline
-        setScannedJobs([
-          { id: "job-airbnb", title: "Frontend Engineer", company: "Airbnb", atsScore: 93, passed: true },
-          { id: "job-vercel", title: "Senior React Engineer", company: "Vercel", atsScore: 91, passed: true },
-        ]);
+        setScannedJobs(res.appliedJobs || []);
       } else {
         addLog(`[${timeStr()}] [Error] ${res.logs[0] || "Automation failed."}`);
       }
@@ -322,10 +320,24 @@ export default function AIAgentPage() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <Label>Location</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-muted-foreground text-xs">📍</span>
+                    <Input
+                      value={locationQuery}
+                      onChange={(e) => setLocationQuery(e.target.value)}
+                      placeholder="e.g. Bangalore, Mumbai, Remote"
+                      disabled={isRunning}
+                      className="h-9 border-muted/50 text-xs pl-7"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label>Min ATS Match Score</Label>
-                    <span className="font-bold text-violet-600">{threshold}%</span>
+                    <span className="font-bold text-accent">{threshold}%</span>
                   </div>
                   <input
                     type="range"
@@ -389,7 +401,7 @@ export default function AIAgentPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label>Optimized Target ATS Score</Label>
-                    <span className="font-bold text-violet-600">90% Required</span>
+                    <span className="font-bold text-accent">90% Required</span>
                   </div>
                   <input
                     type="range"
@@ -407,7 +419,7 @@ export default function AIAgentPage() {
                 <Button
                   onClick={handleStartDaemonEngine}
                   disabled={isRunning}
-                  className="w-full h-10 font-bold text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
+                  className="w-full h-10 font-bold text-xs gap-1.5 bg-accent hover:bg-accent-hover text-accent-foreground"
                 >
                   {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Trigger Automation Loop Now
@@ -498,8 +510,8 @@ export default function AIAgentPage() {
                   if (line.includes("[Success]")) colorClass = "text-emerald-400 font-bold";
                   if (line.includes("[Error]") || line.includes("[Fatal]")) colorClass = "text-rose-400 font-bold";
                   if (line.includes("[Warning]")) colorClass = "text-amber-400 font-bold";
-                  if (line.includes("[ATS Score]")) colorClass = "text-violet-400 font-bold";
-                  if (line.includes("[Optimize]")) colorClass = "text-blue-400";
+                  if (line.includes("[ATS Score]")) colorClass = "text-emerald-400 font-bold";
+                  if (line.includes("[Optimize]")) colorClass = "text-teal-400";
                   if (line.startsWith("---")) colorClass = "text-primary font-extrabold tracking-wide mt-4 block border-t border-zinc-800/50 pt-2";
 
                   return (

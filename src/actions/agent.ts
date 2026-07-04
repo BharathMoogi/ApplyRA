@@ -3,6 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { searchJobs } from "./jobs";
+import { sendApplicationEmail } from "@/lib/email";
+import { generateCustomizedResume } from "./generator";
+import { ATSKeywordExtractor } from "@/lib/ai/keyword-extractor";
+import { CoverLetterAgent } from "@/lib/ai/agents/cover-letter-agent";
+import { AutoApplyAgent } from "@/lib/ai/agents/auto-apply-agent";
+import { JobSearchAgent } from "@/lib/ai/agents/job-search-agent";
 
 export interface AgentStepResult {
   jobId: string;
@@ -51,54 +58,83 @@ export async function runAgentStep(
       return { success: false, error: "User profile not found." };
     }
 
-    // 1. Fetch default resume details
     const defaultResume = await prisma.resume.findFirst({
       where: { profileId: profile.id, isDefault: true },
     });
 
-    let resumeSkills = ["React", "TypeScript", "Next.js"];
-    if (defaultResume && defaultResume.content) {
-      try {
-        const parsed = JSON.parse(defaultResume.content);
-        if (parsed.skills) resumeSkills = parsed.skills;
-      } catch (err) {
-        console.error("Failed to parse resume content:", err);
-      }
+    if (!defaultResume) {
+      return { success: false, error: "No primary master resume found. Please upload one first." };
     }
 
-    // 2. ATS evaluation
-    const matched: string[] = [];
-    job.skills.forEach((skill) => {
-      if (resumeSkills.some((s) => s.toLowerCase() === skill.toLowerCase())) {
-        matched.push(skill);
-      }
-    });
-
-    // Mock ATS matching percentage
-    const baseScore = Math.floor(Math.random() * 15) + 65; // 65 - 80
-    const matchedBonus = Math.floor((matched.length / Math.max(job.skills.length, 1)) * 20); // up to 20%
-    const atsScore = Math.min(baseScore + matchedBonus, 98);
-
-    const passed = atsScore >= threshold;
     const logs: string[] = [];
     const time = () => new Date().toLocaleTimeString("en-US", { hour12: false });
 
-    // Build timeline execution log lines
     logs.push(`[${time()}] [Info] Found job listing: "${job.title}" at ${job.company}`);
-    logs.push(`[${time()}] [Analyze] Evaluating description requirement keywords...`);
-    logs.push(`[${time()}] [Analyze] Resume matching keywords: ${matched.join(", ") || "none"}`);
-    logs.push(`[${time()}] [ATS Score] Calculated compatibility: ${atsScore}%`);
+    logs.push(`[${time()}] [Analyze] Extracting requirement keywords dynamically...`);
+
+    const extracted = await ATSKeywordExtractor.extractKeywords(
+      `Job Title: ${job.title}\nCompany: ${job.company}\nDescription/Skills:\n${job.skills.join(", ")}`
+    );
+
+    const extractedTags = [...extracted.technologies, ...extracted.skills].slice(0, 8);
+    logs.push(`[${time()}] [Analyze] Identified dynamic keywords: ${extractedTags.join(", ") || "none"}`);
+    logs.push(`[${time()}] [Optimizer] Starting live ATS keyword optimization loop...`);
+
+    const tailoringRes = await generateCustomizedResume(
+      defaultResume.id,
+      `Job Title: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location}\nSkills/Requirements:\n${job.skills.join("\n")}`
+    );
+
+    if (!tailoringRes.success || !tailoringRes.result) {
+      logs.push(`[${time()}] [Optimizer Error] Customizer failed: ${tailoringRes.error}`);
+      return { success: false, error: tailoringRes.error || "Failed to customize resume" };
+    }
+
+    const { originalScore, optimizedScore, matchedKeywords, missingKeywords, tailoredData } = tailoringRes.result;
+    const atsScore = optimizedScore;
+    const passed = atsScore >= threshold;
+
+    logs.push(`[${time()}] [ATS Score] Calculated score: ${atsScore}% (Target: >= ${threshold}%)`);
 
     if (passed) {
       logs.push(`[${time()}] [Success] Compatibility meets minimum threshold limit (>= ${threshold}%)`);
       logs.push(`[${time()}] [Optimizer] Customizing master resume to prioritize matched keywords...`);
-      logs.push(`[${time()}] [Optimizer] Formulating custom cover letter for ${job.company}...`);
-      logs.push(`[${time()}] [Submission] Submitting tailored assets to Greenhouse portal...`);
       
-      // Simulate Greenhouse/Lever form response
-      logs.push(`[${time()}] [Portal Response] Status code: 200 (Success)`);
+      const newResume = await prisma.resume.create({
+        data: {
+          profileId: profile.id,
+          title: `Tailored: ${job.company} - ${job.title}`,
+          content: JSON.stringify(tailoredData),
+          isDefault: false,
+        }
+      });
+      logs.push(`[${time()}] [Database] Saved customized version as: "${newResume.title}"`);
+      
+      logs.push(`[${time()}] [Optimizer] Formulating custom cover letter for ${job.company}...`);
+      logs.push(`[${time()}] [Optimizer] Formulating custom cover letter for ${job.company}...`);
+      let coverLetterText = "";
+      try {
+        coverLetterText = await CoverLetterAgent.generateTailoredCoverLetter(
+          job.company,
+          job.title,
+          job.skills.join(", "),
+          tailoredData as any,
+          profile.fullName || user.email || "Applicant"
+        );
+        logs.push(`[${time()}] [Optimizer] Custom cover letter generated successfully.`);
+      } catch (clErr: any) {
+        logs.push(`[${time()}] [Warning] Failed to generate cover letter: ${clErr.message}`);
+      }
 
-      // Write to tracking database (simulating submission tracking)
+      const applyRes = await AutoApplyAgent.apply(job.jobUrl, {
+        fullName: profile.fullName || "Applicant",
+        email: user.email!,
+        phone: profile.phone || "",
+        coverLetterText: coverLetterText
+      });
+      
+      logs.push(...applyRes.logs);
+
       const existing = await prisma.jobApplication.findFirst({
         where: {
           profileId: profile.id,
@@ -112,7 +148,7 @@ export async function runAgentStep(
           data: {
             status: "APPLIED",
             appliedAt: new Date(),
-            notes: `Auto-submitted by AI Agent (ATS Match: ${atsScore}%).`,
+            notes: `Auto-submitted by AI Agent via ${applyRes.portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${newResume.id}`,
           },
         });
       } else {
@@ -126,12 +162,29 @@ export async function runAgentStep(
             salary: job.salary,
             status: "APPLIED",
             appliedAt: new Date(),
-            notes: `Auto-submitted by AI Agent (ATS Match: ${atsScore}%).`,
+            notes: `Auto-submitted by AI Agent via ${applyRes.portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${newResume.id}`,
           },
         });
       }
 
       logs.push(`[${time()}] [Database] Created tracker entry under status: APPLIED`);
+
+      try {
+        await sendApplicationEmail({
+          toEmail: user.email!,
+          userName: profile.fullName || user.email || "User",
+          jobTitle: job.title,
+          company: job.company,
+          location: job.location,
+          salary: job.salary,
+          atsScore,
+          jobUrl: job.jobUrl,
+        });
+        logs.push(`[${time()}] [Email] Confirmation email sent to ${user.email}`);
+      } catch (emailErr: any) {
+        console.error("Failed to send email:", emailErr);
+        logs.push(`[${time()}] [Email] Error: ${emailErr?.message || JSON.stringify(emailErr)}`);
+      }
     } else {
       logs.push(`[${time()}] [Skipped] Compatibility score (${atsScore}%) below threshold (${threshold}%)`);
       logs.push(`[${time()}] [Info] Moving to next matching job.`);
@@ -177,9 +230,11 @@ export async function runAutomationEngine(): Promise<{
   success: boolean;
   logs: string[];
   appliedCount: number;
+  appliedJobs: { id: string; title: string; company: string; atsScore: number; passed: boolean }[];
 }> {
   const logs: string[] = [];
   let appliedCount = 0;
+  const appliedJobs: { id: string; title: string; company: string; atsScore: number; passed: boolean }[] = [];
   const time = () => new Date().toLocaleTimeString("en-US", { hour12: false });
 
   try {
@@ -189,7 +244,7 @@ export async function runAutomationEngine(): Promise<{
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { success: false, logs: [`[${time()}] [Error] Unauthorized access`], appliedCount: 0 };
+      return { success: false, logs: [`[${time()}] [Error] Unauthorized access`], appliedCount: 0, appliedJobs: [] };
     }
 
     const profile = await prisma.profile.findUnique({
@@ -197,113 +252,64 @@ export async function runAutomationEngine(): Promise<{
     });
 
     if (!profile) {
-      return { success: false, logs: [`[${time()}] [Error] Profile not found`], appliedCount: 0 };
+      return { success: false, logs: [`[${time()}] [Error] Profile not found`], appliedCount: 0, appliedJobs: [] };
+    }
+
+    const defaultResume = await prisma.resume.findFirst({
+      where: { profileId: profile.id, isDefault: true },
+    });
+
+    if (!defaultResume) {
+      return { success: false, logs: [`[${time()}] [Error] Master resume not found`], appliedCount: 0, appliedJobs: [] };
     }
 
     logs.push(`[${time()}] [System] Automation daemon cron triggered.`);
     logs.push(`[${time()}] [System] Scanning job boards for new openings matching preferences...`);
 
-    // Fetch preferences from bio configuration JSON
-    let preferredRoles = ["Frontend Software Engineer", "React Developer"];
-    if (profile.bio) {
-      try {
-        const json = JSON.parse(profile.bio);
-        if (json.preferredRoles) preferredRoles = json.preferredRoles;
-      } catch (e) {
-        // use default
-      }
+    let masterResumeData;
+    try {
+      masterResumeData = JSON.parse(defaultResume.content);
+    } catch {
+      masterResumeData = { skills: [] };
     }
 
-    // Mock new jobs discovered matching preferred roles
-    const matchingJobs = [
-      {
-        id: "job-airbnb",
-        title: preferredRoles[0] || "Frontend Engineer",
-        company: "Airbnb",
-        location: "SF, Remote",
-        salary: "$140k - $170k",
-        skills: ["React", "TypeScript", "Next.js", "Tailwind CSS", "AWS"],
-        jobUrl: "https://airbnb.com/careers/role-frontend",
-      },
-      {
-        id: "job-vercel",
-        title: preferredRoles[1] || "Senior React Engineer",
-        company: "Vercel",
-        location: "Remote",
-        salary: "$150k - $180k",
-        skills: ["Next.js", "TypeScript", "Tailwind CSS", "Docker", "Kubernetes"],
-        jobUrl: "https://vercel.com/careers/role-react",
-      },
-    ];
+    const rankedJobs = await JobSearchAgent.searchAndRankJobs(
+      { bio: profile.bio, location: profile.location },
+      masterResumeData,
+      2
+    );
 
-    logs.push(`[${time()}] [System] Discovered ${matchingJobs.length} matching job opportunities.`);
+    if (rankedJobs.length === 0) {
+      logs.push(`[${time()}] [Info] No suitable matching jobs found at this time.`);
+      return { success: true, logs, appliedCount: 0, appliedJobs: [] };
+    }
 
-    for (const job of matchingJobs) {
+    logs.push(`[${time()}] [System] Discovered ${rankedJobs.length} matching job opportunities.`);
+
+    for (const ranked of rankedJobs) {
+      const job = ranked.job;
       logs.push(`\n--- Automating Target: "${job.title}" at ${job.company} ---`);
       
-      // Looping ATS Optimization until score >= 90%
-      let atsScore = 72; // starting base score
-      let iteration = 1;
-      let resumeContent = "Master Resume content";
-
-      logs.push(`[${time()}] [Optimize] Starting keyword customization loop...`);
-
-      while (atsScore < 90 && iteration <= 4) {
-        logs.push(`[${time()}] [Optimize] Loop ${iteration}: Re-drafting bullet points and appending matching tags...`);
-        
-        // Add incremental ATS scores
-        if (iteration === 1) {
-          atsScore = 78;
-          logs.push(`[${time()}] [ATS Score] Calculated score: ${atsScore}% (Needs to be >= 90%)`);
-        } else if (iteration === 2) {
-          atsScore = 86;
-          logs.push(`[${time()}] [ATS Score] Appended keywords (TypeScript, Next.js). Calculated: ${atsScore}% (Needs to be >= 90%)`);
-        } else {
-          atsScore = 93;
-          logs.push(`[${time()}] [ATS Score] Rephrased work experience bullets. Calculated: ${atsScore}% (Optimized Passed!)`);
+      const stepRes = await runAgentStep(job, 80);
+      
+      if (!stepRes.success) {
+        logs.push(`[${time()}] [Error] Job processing failed: ${stepRes.error}`);
+        continue;
+      }
+      
+      if (stepRes.result) {
+        logs.push(...stepRes.result.logs);
+        if (stepRes.result.passed) {
+          appliedCount++;
+          appliedJobs.push({
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            atsScore: stepRes.result.atsScore,
+            passed: true
+          });
         }
-
-        iteration++;
-        await new Promise((r) => setTimeout(r, 100)); // micro delay
       }
-
-      logs.push(`[${time()}] [Success] Custom tailored resume generated successfully (ATS Match: ${atsScore}%).`);
-      logs.push(`[${time()}] [Success] Formulated personalized cover letter matching description keywords.`);
-      logs.push(`[${time()}] [Portal] Submitting tailored assets through Lever API portal...`);
-      logs.push(`[${time()}] [Portal Response] Submission HTTP: 200 (Confirm submission OK)`);
-
-      // Write applied application to database
-      const existing = await prisma.jobApplication.findFirst({
-        where: { profileId: profile.id, jobUrl: job.jobUrl },
-      });
-
-      if (existing) {
-        await prisma.jobApplication.update({
-          where: { id: existing.id },
-          data: {
-            status: "APPLIED",
-            notes: `Auto-submitted by Hourly Daemon (ATS Match: ${atsScore}%).`,
-            appliedAt: new Date(),
-          },
-        });
-      } else {
-        await prisma.jobApplication.create({
-          data: {
-            profileId: profile.id,
-            companyName: job.company,
-            jobTitle: job.title,
-            jobUrl: job.jobUrl,
-            location: job.location,
-            salary: job.salary,
-            status: "APPLIED",
-            notes: `Auto-submitted by Hourly Daemon (ATS Match: ${atsScore}%).`,
-            appliedAt: new Date(),
-          },
-        });
-      }
-
-      appliedCount++;
-      logs.push(`[${time()}] [Database] Tracking entry created successfully under status: APPLIED`);
     }
 
     logs.push(`\n[${time()}] [System] Hourly Automation cycle complete. Submissions processed: ${appliedCount}`);
@@ -315,6 +321,7 @@ export async function runAutomationEngine(): Promise<{
       success: true,
       logs,
       appliedCount,
+      appliedJobs,
     };
   } catch (err: any) {
     console.error(err);
@@ -322,6 +329,7 @@ export async function runAutomationEngine(): Promise<{
       success: false,
       logs: [`[${time()}] [Fatal Error] ${err.message}`],
       appliedCount: 0,
+      appliedJobs: [],
     };
   }
 }

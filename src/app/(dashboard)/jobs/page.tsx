@@ -150,7 +150,7 @@ export default function JobSearchPage() {
           <SlidersHorizontal className="h-4 w-4" />
           Filters
           {(appliedFilters.location || appliedFilters.experience !== "all" || appliedFilters.remote) && (
-            <span className="h-2 w-2 rounded-full bg-violet-600 animate-pulse" />
+            <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
           )}
         </Button>
 
@@ -200,7 +200,7 @@ export default function JobSearchPage() {
                 id="remote-checkbox"
                 checked={remoteFilter}
                 onChange={(e) => setRemoteFilter(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent"
               />
               <label htmlFor="remote-checkbox" className="text-xs font-semibold cursor-pointer">
                 Remote Only

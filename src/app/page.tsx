@@ -12,16 +12,16 @@ export default function HomePage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="container flex flex-col items-center justify-center gap-6 pb-8 pt-16 md:pt-24 lg:pt-32">
+        <section className="container mx-auto flex flex-col items-center justify-center gap-6 pb-8 pt-16 md:pt-24 lg:pt-32">
           <div className="inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium">
             <span className="mr-2">🚀</span>
             <span>AI-Powered Job Application Automation</span>
           </div>
 
-          <h1 className="max-w-4xl text-center text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-            Land your dream job with{" "}
-            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-              AI Job Agent
+          <h1 className="max-w-5xl text-center text-3xl font-black tracking-widest sm:text-4xl md:text-5xl lg:text-6xl uppercase font-mono leading-tight">
+            LAND YOUR DREAM JOB WITH{" "}
+            <span className="bg-gradient-to-r from-primary via-emerald-400 to-accent bg-clip-text text-transparent">
+              APPLYRA
             </span>
           </h1>
 
@@ -31,17 +31,21 @@ export default function HomePage() {
             what matters.
           </p>
 
+          <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-muted/40 border border-muted/50 rounded-full px-4 py-1.5 transition-transform hover:scale-105 duration-300">
+            Founded by <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent font-black">Moogi Bharath</span>
+          </div>
+
           <div className="flex flex-col gap-4 sm:flex-row">
             <Link
               href="/register"
-              className={cn(buttonVariants({ size: "lg" }), "gap-2")}
+              className={cn(buttonVariants({ size: "lg" }), "gap-2 hover:bg-accent hover:text-accent-foreground border-transparent transition-all")}
             >
               Get Started Free
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/login"
-              className={cn(buttonVariants({ size: "lg", variant: "outline" }))}
+              className={cn(buttonVariants({ size: "lg", variant: "outline" }), "hover:bg-accent/5 hover:text-accent border-muted-foreground/20")}
             >
               Sign In
             </Link>
@@ -49,7 +53,7 @@ export default function HomePage() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="container py-16 md:py-24">
+        <section id="features" className="container mx-auto py-16 md:py-24">
           <h2 className="mb-12 text-center text-3xl font-bold tracking-tight">
             Everything you need to automate your job search
           </h2>
@@ -88,11 +92,11 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="group relative rounded-xl border bg-card p-6 transition-shadow hover:shadow-lg">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600/10 to-indigo-600/10 text-violet-600 dark:text-violet-400">
-        <Icon className="h-6 w-6" />
+    <div className="group relative rounded-xl border bg-card p-6 transition-all duration-300 hover:shadow-xl hover:border-accent/30 hover:-translate-y-1">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 text-accent transition-all duration-300 group-hover:bg-accent group-hover:text-accent-foreground">
+        <Icon className="h-6 w-6 animate-pulse group-hover:animate-none" />
       </div>
-      <h3 className="mb-2 text-lg font-semibold">{title}</h3>
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{title}</h3>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
   );

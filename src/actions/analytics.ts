@@ -170,7 +170,7 @@ export async function getAnalyticsDashboardData(): Promise<{
       reasonsMap["Other"] = 1;
     }
 
-    const colors = ["bg-rose-500", "bg-amber-500", "bg-violet-500", "bg-zinc-500"];
+    const colors = ["bg-rose-500", "bg-amber-500", "bg-accent", "bg-zinc-500"];
     const rejectionReasons: RejectionReasonItem[] = Object.keys(reasonsMap).map((reason, idx) => ({
       reason,
       count: reasonsMap[reason],

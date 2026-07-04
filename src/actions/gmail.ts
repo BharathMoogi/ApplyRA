@@ -14,7 +14,7 @@ export interface SyncEmailResult {
 }
 
 // Global flag simulation for OAuth (simulated in user session or DB metadata if needed)
-let isGmailConnectedSimulated = false;
+let isGmailConnectedSimulated = true;
 
 export async function getGmailConnectionStatus(): Promise<boolean> {
   return isGmailConnectedSimulated;

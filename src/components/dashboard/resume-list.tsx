@@ -80,13 +80,13 @@ export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
             key={resume.id}
             className={`transition-all duration-200 border-muted/50 relative overflow-hidden ${
               resume.isDefault
-                ? "ring-1 ring-violet-500/50 bg-violet-500/[0.02]"
+                ? "ring-1 ring-accent/50 bg-accent/[0.02]"
                 : "hover:shadow-md"
             }`}
           >
             <CardHeader className="pb-3 flex flex-row items-start justify-between gap-4">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-violet-600/10 flex items-center justify-center text-violet-600 shrink-0 border border-violet-500/10">
+                <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent shrink-0 border border-accent/20">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
@@ -100,7 +100,7 @@ export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
               </div>
 
               {resume.isDefault && (
-                <Badge className="bg-violet-500 hover:bg-violet-600 text-white select-none shrink-0 font-semibold text-[10px] py-0 px-2 h-5 flex items-center gap-0.5">
+                <Badge className="bg-accent hover:bg-accent-hover text-accent-foreground select-none shrink-0 font-semibold text-[10px] py-0 px-2 h-5 flex items-center gap-0.5">
                   <Star className="h-3 w-3 fill-current" />
                   Primary
                 </Badge>
@@ -131,7 +131,7 @@ export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
                   variant="outline"
                   size="xs"
                   className={`flex-1 text-[11px] gap-1 h-8 ${
-                    resume.isDefault ? "bg-violet-500/5 hover:bg-violet-500/10 border-violet-500/20 hover:border-violet-500/30 text-violet-600 dark:text-violet-400" : ""
+                    resume.isDefault ? "bg-accent/5 hover:bg-accent/10 border-accent/20 hover:border-accent/30 text-accent" : ""
                   }`}
                   disabled={isPending}
                   onClick={() => onEdit && onEdit(resume)}

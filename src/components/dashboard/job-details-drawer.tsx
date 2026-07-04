@@ -29,7 +29,7 @@ export function JobDetailsDrawer({
     if (!job) return;
     setIsPromoting(true);
     try {
-      const res = await applyToBookmarkedJob(job.jobUrl);
+      const res = await applyToBookmarkedJob(job);
       if (res.success) {
         setIsApplied(true);
         if (onBookmarkActionComplete) {
@@ -74,26 +74,26 @@ export function JobDetailsDrawer({
           {/* Metadata Cards */}
           <div className="grid gap-3 grid-cols-3 text-center">
             <div className="border border-muted/50 rounded-xl p-3 bg-muted/5">
-              <MapPin className="h-4 w-4 text-violet-600 mx-auto mb-1" />
+              <MapPin className="h-4 w-4 text-accent mx-auto mb-1" />
               <h5 className="text-[10px] text-muted-foreground uppercase font-bold">Location</h5>
               <p className="text-xs font-semibold mt-0.5 truncate">{job.location}</p>
             </div>
             <div className="border border-muted/50 rounded-xl p-3 bg-muted/5">
-              <DollarSign className="h-4 w-4 text-violet-600 mx-auto mb-1" />
+              <DollarSign className="h-4 w-4 text-accent mx-auto mb-1" />
               <h5 className="text-[10px] text-muted-foreground uppercase font-bold">Salary</h5>
               <p className="text-xs font-semibold mt-0.5 truncate">{job.salary}</p>
             </div>
             <div className="border border-muted/50 rounded-xl p-3 bg-muted/5">
-              <Calendar className="h-4 w-4 text-violet-600 mx-auto mb-1" />
+              <Calendar className="h-4 w-4 text-accent mx-auto mb-1" />
               <h5 className="text-[10px] text-muted-foreground uppercase font-bold">Posted</h5>
               <p className="text-xs font-semibold mt-0.5 truncate">{job.postedAt}</p>
             </div>
           </div>
 
           {/* ATS COMPATIBILITY CARD */}
-          <div className="border border-violet-500/20 bg-violet-600/[0.02] rounded-xl p-5 space-y-4">
+          <div className="border border-accent/20 bg-accent/[0.02] rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-bold text-sm text-violet-600 dark:text-violet-400">
+              <div className="flex items-center gap-1.5 font-bold text-sm text-accent">
                 <Sparkles className="h-4 w-4" />
                 ATS Compatibility Report
               </div>
@@ -151,7 +151,7 @@ export function JobDetailsDrawer({
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 text-violet-600 dark:text-violet-400 border-violet-500/20 hover:border-violet-500/30 hover:bg-violet-500/5"
+              className="gap-1.5 text-accent border-accent/20 hover:border-accent/30 hover:bg-accent/5"
               onClick={handleTrackApplication}
               disabled={isPromoting}
             >

@@ -400,7 +400,7 @@ export default function SettingsDashboardPage() {
                 </div>
                 <div className="flex flex-wrap gap-1.5 pt-2">
                   {skills.map((s) => (
-                    <span key={s} className="inline-flex items-center gap-1 px-3 py-1 rounded bg-violet-600/10 text-violet-600 dark:text-violet-400 font-bold border border-violet-600/10 text-[10px]">
+                    <span key={s} className="inline-flex items-center gap-1 px-3 py-1 rounded bg-accent/10 text-accent font-bold border border-accent/20 text-[10px]">
                       {s}
                       <button type="button" onClick={() => removeSkill(s)}><X className="h-3.5 w-3.5" /></button>
                     </span>
@@ -453,7 +453,7 @@ export default function SettingsDashboardPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Minimum ATS Score for Auto-Apply</Label>
-                    <span className="font-bold text-violet-600 text-xs">{autoApplyScore}%</span>
+                    <span className="font-bold text-accent text-xs">{autoApplyScore}%</span>
                   </div>
                   <input
                     type="range"

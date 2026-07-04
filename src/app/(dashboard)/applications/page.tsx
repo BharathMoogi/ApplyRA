@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loading } from "@/components/shared/loading";
+import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet";
 import {
   Briefcase,
@@ -241,7 +242,7 @@ export default function ApplicationsPage() {
           </div>
           <div className="border border-muted/50 rounded-xl p-4 bg-muted/5">
             <h5 className="text-[10px] text-muted-foreground uppercase font-bold">Interview Rate</h5>
-            <p className="text-2xl font-black mt-1 text-violet-500 flex items-center gap-1">
+            <p className="text-2xl font-black mt-1 text-accent flex items-center gap-1">
               <TrendingUp className="h-5 w-5 shrink-0" />
               {analytics.interviewRate}%
             </p>
@@ -421,7 +422,14 @@ export default function ApplicationsPage() {
                     <td className="p-3 text-muted-foreground">{app.location || "N/A"}</td>
                     <td className="p-3 font-medium">{app.salary || "N/A"}</td>
                     <td className="p-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-600/10 text-violet-600 dark:text-violet-400 capitalize">
+                      <span className={cn(
+                        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold capitalize border",
+                        app.status === "Offer" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                        (app.status === "Interview" || app.status === "HR Round") && "bg-accent/10 text-accent border-accent/20",
+                        app.status === "Rejected" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
+                        (app.status === "Applied" || app.status === "Under Review" || app.status === "OA") && "bg-primary/10 text-primary border-primary/20",
+                        app.status === "Withdrawn" && "bg-muted text-muted-foreground border-transparent"
+                      )}>
                         {app.status}
                       </span>
                     </td>
@@ -660,7 +668,7 @@ export default function ApplicationsPage() {
 
                   <div className="relative border-l border-muted pl-4 ml-2 space-y-4 py-2">
                     <div className="relative text-[11px] leading-snug">
-                      <span className="absolute -left-[21px] top-0.5 h-2 w-2 rounded-full bg-violet-600 border border-background" />
+                      <span className="absolute -left-[21px] top-0.5 h-2 w-2 rounded-full bg-accent border border-background" />
                       <span className="text-muted-foreground font-semibold">Track Created</span>
                       <span className="text-[10px] text-muted-foreground/60 block">{new Date(selectedApp.createdAt).toLocaleDateString()}</span>
                     </div>

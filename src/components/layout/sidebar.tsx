@@ -79,6 +79,14 @@ export function Sidebar() {
           </Button>
         </div>
       )}
+
+      {/* Founded By */}
+      <div className="px-4 pb-4">
+        <div className="rounded-xl border border-muted/40 bg-gradient-to-br from-primary/5 to-accent/5 px-3 py-2.5 text-center">
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-0.5">Founded By</p>
+          <p className="text-[11px] font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Moogi Bharath</p>
+        </div>
+      </div>
     </aside>
   );
 }

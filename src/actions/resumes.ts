@@ -3,13 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import mammoth from "mammoth";
 
-// structured data schema definition matching database JSON string
 export interface ResumePersonalDetails {
   name: string;
   email: string;
   phone: string;
   website: string;
+  linkedin?: string;
+  github?: string;
+  portfolio?: string;
+  location?: string;
 }
 
 export interface ResumeWorkExperience {
@@ -17,12 +21,52 @@ export interface ResumeWorkExperience {
   role: string;
   duration: string;
   description: string;
+  location?: string;
+  employmentType?: string;
 }
 
 export interface ResumeEducation {
   school: string;
   degree: string;
   year: string;
+  fieldOfStudy?: string;
+  grade?: string;
+  startDate?: string;
+  endDate?: string;
+  coursework?: string[];
+}
+
+export interface ResumeProject {
+  name: string;
+  description: string;
+  technologies?: string[];
+  duration?: string;
+  githubUrl?: string;
+  liveUrl?: string;
+}
+
+export interface ResumeSkills {
+  languages: string[];
+  frameworks: string[];
+  databases: string[];
+  tools: string[];
+  cloud: string[];
+  other: string[];
+}
+
+export interface ResumeCertification {
+  name: string;
+  issuer: string;
+  issueDate?: string;
+  expiryDate?: string;
+  credentialUrl?: string;
+}
+
+export interface ResumeAchievement {
+  title: string;
+  category: "Award" | "Leadership" | "Competition" | "Sport" | "Publication" | "Extracurricular" | "Other";
+  description: string;
+  date?: string;
 }
 
 export interface StructuredResumeData {
@@ -30,6 +74,11 @@ export interface StructuredResumeData {
   experience: ResumeWorkExperience[];
   education: ResumeEducation[];
   skills: string[];
+  summary?: string;
+  projects?: ResumeProject[];
+  categorizedSkills?: ResumeSkills;
+  certifications?: ResumeCertification[];
+  achievements?: ResumeAchievement[];
 }
 
 // Helper to get authenticated profile
@@ -71,11 +120,16 @@ export async function getResumes() {
 }
 
 /**
- * Simulates uploading and parsing a PDF/DOCX resume file.
+ * Uploads and parses a PDF/DOCX resume file using simple heuristics.
  * Returns the created database resume record.
  */
-export async function uploadResume(fileName: string, fileSize: number) {
+export async function uploadResume(formData: FormData) {
   try {
+    const file = formData.get("file") as File | null;
+    if (!file) {
+      return { success: false, error: "No file provided" };
+    }
+    const fileName = file.name;
     const profile = await getAuthenticatedProfile();
 
     // Check if it's the first resume, if so make it default
@@ -84,43 +138,42 @@ export async function uploadResume(fileName: string, fileSize: number) {
     });
     const isDefault = count === 0;
 
-    // Extract name from file, e.g. "Jane_Doe_CV.pdf" -> "Jane Doe"
-    const cleanedName = fileName
-      .replace(/\.[^/.]+$/, "") // remove extension
-      .replace(/[_-]/g, " ") // replace underscores/dashes
-      .trim();
+    // Extract text from file
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    let parsedText = "";
 
-    // Generate mock AI parsed structured details based on file name
-    const mockParsedData: StructuredResumeData = {
-      personal: {
-        name: cleanedName || "John Doe",
-        email: profile.fullName ? `${cleanedName.toLowerCase().replace(/\s+/g, ".")}@example.com` : "john.doe@example.com",
-        phone: "+1 (555) 019-2834",
-        website: `https://${cleanedName.toLowerCase().replace(/\s+/g, "") || "portfolio"}.dev`,
-      },
-      experience: [
-        {
-          company: "Enterprise Software Labs",
-          role: "Senior Full Stack Engineer",
-          duration: "2023 - Present",
-          description: "Led development of core responsive UI using Next.js, Tailwind CSS and PostgreSQL. Boosted system performance by 35%.",
-        },
-        {
-          company: "Interactive Agency Inc.",
-          role: "Frontend Developer",
-          duration: "2021 - 2023",
-          description: "Engineered web applications utilizing React and TypeScript. Collaborated with designers to deliver modern interface visuals.",
-        },
-      ],
-      education: [
-        {
-          school: "State University of Tech",
-          degree: "B.S. in Computer Science",
-          year: "2021",
-        },
-      ],
-      skills: ["React", "Next.js", "TypeScript", "Tailwind CSS", "Node.js", "Prisma", "PostgreSQL", "Supabase", "Git"],
-    };
+    if (fileName.toLowerCase().endsWith(".pdf")) {
+      parsedText = await new Promise<string>((resolve, reject) => {
+        try {
+          const PDFParser = require("pdf2json");
+          const pdfParser = new PDFParser(null, 1);
+          pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
+          pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
+          pdfParser.parseBuffer(buffer);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    } else if (fileName.toLowerCase().endsWith(".docx")) {
+      const result = await mammoth.extractRawText({ buffer });
+      parsedText = result.value;
+    } else {
+      return { success: false, error: "Unsupported file type." };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const authName = user?.user_metadata?.full_name || profile.fullName || "Your Name";
+
+    // Call the hybrid AI parser
+    const { parseResumeHybrid } = await import('@/lib/parser');
+    const parsedData = await parseResumeHybrid(parsedText, authName);
+
+    // Fallback default image for website if empty
+    if (!parsedData.personal.website) {
+      parsedData.personal.website = "";
+    }
 
     // Save record to DB
     const resume = await prisma.resume.create({
@@ -129,7 +182,7 @@ export async function uploadResume(fileName: string, fileSize: number) {
         title: fileName,
         fileUrl: `/uploads/${Date.now()}_${fileName}`,
         isDefault,
-        content: JSON.stringify(mockParsedData),
+        content: JSON.stringify(parsedData),
       },
     });
 

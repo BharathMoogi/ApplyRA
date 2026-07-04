@@ -94,7 +94,7 @@ export function HeaderNotifications() {
       case "success":
         return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
       case "ats":
-        return <Sparkles className="h-4 w-4 text-violet-600" />;
+        return <Sparkles className="h-4 w-4 text-accent" />;
       case "interview":
         return <Calendar className="h-4 w-4 text-amber-500" />;
       case "failure":
@@ -241,7 +241,7 @@ export function HeaderNotifications() {
                   </div>
                   <div className="p-3 border rounded-xl bg-card">
                     <span className="text-[9px] uppercase font-bold text-muted-foreground">ATS Target Score</span>
-                    <div className="text-xl font-black mt-1 text-violet-600">{summaryData.atsImprovementAverage}% avg</div>
+                    <div className="text-xl font-black mt-1 text-accent">{summaryData.atsImprovementAverage}% avg</div>
                   </div>
                 </div>
 

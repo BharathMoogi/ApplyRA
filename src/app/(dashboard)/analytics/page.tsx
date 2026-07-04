@@ -91,10 +91,10 @@ export default function AnalyticsDashboardPage() {
         <Card className="border-muted/50 hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Average ATS Match</CardTitle>
-            <Sparkles className="h-4 w-4 text-violet-600" />
+            <Sparkles className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-violet-600 flex items-baseline gap-0.5">
+            <div className="text-2xl font-black text-accent flex items-baseline gap-0.5">
               {data.avgAtsScore}
               <span className="text-sm font-bold">%</span>
             </div>
@@ -135,7 +135,7 @@ export default function AnalyticsDashboardPage() {
               if (bar.bracket.includes("90%")) {
                 barColor = "bg-emerald-500/80 hover:bg-emerald-500";
               } else if (bar.bracket.includes("80%")) {
-                barColor = "bg-violet-600/80 hover:bg-violet-600";
+                barColor = "bg-accent/80 hover:bg-accent";
               } else if (bar.bracket.includes("70%")) {
                 barColor = "bg-amber-500/80 hover:bg-amber-500";
               }
@@ -183,7 +183,7 @@ export default function AnalyticsDashboardPage() {
                         : idx === 1
                         ? "#f59e0b" // amber-500
                         : idx === 2
-                        ? "#8b5cf6" // violet-500
+                        ? "#10B981" // accent
                         : "#71717a"; // zinc-500
                     
                     const dashArray = `${percent} ${100 - percent}`;
@@ -288,7 +288,7 @@ export default function AnalyticsDashboardPage() {
                       {item.possessed ? (
                         <span className="text-[10px] text-emerald-500 font-medium">Keywords optimized</span>
                       ) : (
-                        <span className="text-[10px] text-violet-600 dark:text-violet-400 font-bold flex items-center justify-end gap-1.5">
+                        <span className="text-[10px] text-accent font-bold flex items-center justify-end gap-1.5">
                           <Sparkles className="h-3 w-3 fill-current animate-pulse" />
                           Add to master resume
                         </span>

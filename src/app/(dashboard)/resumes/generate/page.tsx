@@ -26,6 +26,7 @@ export default function ResumeGeneratorPage() {
 
   // Result state
   const [generationResult, setGenerationResult] = useState<TailoredResumeResult | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<'classic' | 'modern' | 'compact'>('classic');
 
   // Load user resumes on mount
   useEffect(() => {
@@ -243,7 +244,7 @@ export default function ResumeGeneratorPage() {
                   <h5 className="font-semibold text-muted-foreground block mb-2">Optimized Skills (AI-Injected)</h5>
                   <div className="flex flex-wrap gap-1.5">
                     {generationResult.missingKeywords.slice(0, 2).map((k) => (
-                      <span key={k} className="px-2 py-0.5 bg-violet-600/10 text-violet-600 dark:text-violet-400 font-semibold rounded text-[10px] flex items-center gap-0.5 border border-violet-500/20">
+                      <span key={k} className="px-2 py-0.5 bg-accent/10 text-accent font-semibold rounded text-[10px] flex items-center gap-0.5 border border-accent/20">
                         <PlusIcon className="h-3 w-3 shrink-0" />
                         {k}
                       </span>
@@ -252,6 +253,76 @@ export default function ResumeGeneratorPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* ATS SCORING BREAKDOWN */}
+            {generationResult.atsScoring && (
+              <Card className="border-muted/50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold">ATS Metric Breakdown</CardTitle>
+                  <CardDescription>Detailed scan of tailored resume metrics</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div className="grid grid-cols-2 gap-3 pb-2">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">Keywords</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${generationResult.atsScoring.keywordMatchScore}%` }} />
+                        </div>
+                        <span className="font-semibold text-[11px] min-w-[28px] text-right">{generationResult.atsScoring.keywordMatchScore}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">Formatting</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${generationResult.atsScoring.formattingQualityScore}%` }} />
+                        </div>
+                        <span className="font-semibold text-[11px] min-w-[28px] text-right">{generationResult.atsScoring.formattingQualityScore}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">Completeness</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${generationResult.atsScoring.sectionCompletenessScore}%` }} />
+                        </div>
+                        <span className="font-semibold text-[11px] min-w-[28px] text-right">{generationResult.atsScoring.sectionCompletenessScore}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">Action Verbs</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${generationResult.atsScoring.actionVerbUsageScore}%` }} />
+                        </div>
+                        <span className="font-semibold text-[11px] min-w-[28px] text-right">{generationResult.atsScoring.actionVerbUsageScore}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">Readability</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${generationResult.atsScoring.readabilityScore}%` }} />
+                        </div>
+                        <span className="font-semibold text-[11px] min-w-[28px] text-right">{generationResult.atsScoring.readabilityScore}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {generationResult.atsScoring.suggestions.length > 0 && (
+                    <div className="border-t pt-3">
+                      <h5 className="font-semibold text-muted-foreground block mb-2 uppercase text-[10px] tracking-wider">Suggestions for Improvement</h5>
+                      <ul className="space-y-1.5 list-disc pl-4 text-muted-foreground leading-snug">
+                        {generationResult.atsScoring.suggestions.map((suggestion, idx) => (
+                          <li key={idx} className="text-[11px]">{suggestion}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* OPTIMIZED SENTENCES DIFF VIEW */}
             <Card className="border-muted/50">
@@ -285,77 +356,247 @@ export default function ResumeGeneratorPage() {
 
           {/* RIGHT PANEL: Customized Preview sheet (3/5 width) */}
           <div className="lg:col-span-3 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Customized Resume Preview</h3>
+            <div className="flex items-center justify-between no-print">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold">Customized Resume Preview</h3>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => setSelectedTemplate(e.target.value as any)}
+                  className="text-[11px] h-8 px-2 border rounded-lg bg-background border-muted/50 focus:outline-none focus:border-ring font-semibold"
+                >
+                  <option value="classic">Harvard Classic (Serif)</option>
+                  <option value="modern">Modern Minimalist (Sleek)</option>
+                  <option value="compact">Creative Compact (1-Page)</option>
+                </select>
+              </div>
               <Button size="sm" className="gap-1.5 text-xs font-semibold h-8 px-4" onClick={handlePrint}>
                 <Download className="h-4 w-4" />
                 Download PDF
               </Button>
             </div>
 
-            {/* HTML Resume preview container (styled professional format) */}
+            {/* HTML Resume preview container (styled dynamic templates) */}
             <div
               id="printable-resume"
-              className="border border-muted/50 rounded-xl p-8 bg-white text-black shadow-lg space-y-6 max-w-[800px] mx-auto text-left"
+              className={`border border-muted/50 rounded-xl bg-white text-black shadow-lg mx-auto text-left w-full transition-all duration-200 ${
+                selectedTemplate === 'classic' ? 'font-serif p-10 space-y-5 max-w-[800px] text-xs' : 
+                selectedTemplate === 'modern' ? 'font-sans p-10 space-y-6 max-w-[800px] text-xs' : 
+                'font-sans p-6 space-y-3.5 max-w-[760px] text-[11px] leading-tight' // compact
+              }`}
             >
               {/* Header Contact info */}
-              <div className="text-center space-y-2 border-b pb-4">
-                <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                  {generationResult.tailoredData.personal.name}
-                </h2>
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-600">
-                  <span className="flex items-center gap-1">
-                    <Mail className="h-3.5 w-3.5" />
-                    {generationResult.tailoredData.personal.email}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Phone className="h-3.5 w-3.5" />
-                    {generationResult.tailoredData.personal.phone}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Globe className="h-3.5 w-3.5" />
-                    {generationResult.tailoredData.personal.website}
-                  </span>
+              {selectedTemplate === 'classic' ? (
+                <div className="text-center space-y-1.5 border-b pb-3">
+                  <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                    {generationResult.tailoredData.personal.name}
+                  </h2>
+                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs text-gray-600">
+                    {generationResult.tailoredData.personal.email && (
+                      <span>{generationResult.tailoredData.personal.email}</span>
+                    )}
+                    {generationResult.tailoredData.personal.phone && (
+                      <span>&bull; {generationResult.tailoredData.personal.phone}</span>
+                    )}
+                    {generationResult.tailoredData.personal.website && (
+                      <span>&bull; {generationResult.tailoredData.personal.website}</span>
+                    )}
+                    {generationResult.tailoredData.personal.location && (
+                      <span>&bull; {generationResult.tailoredData.personal.location}</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : selectedTemplate === 'modern' ? (
+                <div className="space-y-2 border-b pb-4">
+                  <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
+                    {generationResult.tailoredData.personal.name}
+                  </h2>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 font-medium">
+                    {generationResult.tailoredData.personal.email && (
+                      <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.email}</span>
+                    )}
+                    {generationResult.tailoredData.personal.phone && (
+                      <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.phone}</span>
+                    )}
+                    {generationResult.tailoredData.personal.website && (
+                      <span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.website}</span>
+                    )}
+                    {generationResult.tailoredData.personal.location && (
+                      <span>• {generationResult.tailoredData.personal.location}</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Compact Template */
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div>
+                    <h2 className="text-lg font-bold tracking-tight text-gray-900 uppercase">
+                      {generationResult.tailoredData.personal.name}
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-600 justify-end">
+                    {generationResult.tailoredData.personal.email && (
+                      <span>{generationResult.tailoredData.personal.email}</span>
+                    )}
+                    {generationResult.tailoredData.personal.phone && (
+                      <span>| {generationResult.tailoredData.personal.phone}</span>
+                    )}
+                    {generationResult.tailoredData.personal.location && (
+                      <span>| {generationResult.tailoredData.personal.location}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Summary / Objective */}
+              {generationResult.tailoredData.summary && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-1' : 'space-y-2'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Summary
+                  </h3>
+                  <p className={`${selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'} text-gray-700 leading-relaxed`}>
+                    {generationResult.tailoredData.summary}
+                  </p>
+                </div>
+              )}
 
               {/* Work Experience */}
-              <div className="space-y-4">
-                <h3 className="text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-1">
-                  Professional Experience
-                </h3>
-                {generationResult.tailoredData.experience.map((exp, index) => (
-                  <div key={index} className="space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between font-bold text-gray-900">
-                      <span>{exp.role} &bull; {exp.company}</span>
-                      <span className="text-gray-500 font-medium text-[10px]">{exp.duration}</span>
+              {generationResult.tailoredData.experience && generationResult.tailoredData.experience.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Professional Experience
+                  </h3>
+                  {generationResult.tailoredData.experience.map((exp, index) => (
+                    <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}>
+                      <div className="flex items-center justify-between font-bold text-gray-900">
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{exp.role} &bull; {exp.company}</span>
+                        <span className="text-gray-500 font-medium text-[10px]">{exp.duration}</span>
+                      </div>
+                      {exp.location && <p className="text-[10px] text-gray-500 font-semibold">{exp.location}</p>}
+                      <p className="text-gray-600 leading-relaxed whitespace-pre-line text-xs">
+                        {exp.description}
+                      </p>
                     </div>
-                    <p className="text-gray-600 leading-relaxed">
-                      {exp.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Projects */}
+              {generationResult.tailoredData.projects && generationResult.tailoredData.projects.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Projects
+                  </h3>
+                  {generationResult.tailoredData.projects.map((proj, index) => (
+                    <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}>
+                      <div className="flex items-center justify-between font-bold text-gray-900">
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{proj.name}</span>
+                        {proj.duration && <span className="text-gray-500 font-medium text-[10px]">{proj.duration}</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-[10px] text-gray-500 font-semibold">
+                        {proj.githubUrl && <span>GitHub: {proj.githubUrl}</span>}
+                        {proj.liveUrl && <span>Live: {proj.liveUrl}</span>}
+                      </div>
+                      {proj.technologies && proj.technologies.length > 0 && (
+                        <p className="text-[10px] font-bold text-gray-700">Tech Stack: {proj.technologies.join(', ')}</p>
+                      )}
+                      <p className="text-gray-600 leading-relaxed text-xs">
+                        {proj.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Education */}
-              <div className="space-y-4">
-                <h3 className="text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-1">
-                  Education
-                </h3>
-                {generationResult.tailoredData.education.map((edu, index) => (
-                  <div key={index} className="space-y-1 text-xs">
-                    <div className="flex items-center justify-between font-bold text-gray-900">
-                      <span>{edu.degree}</span>
-                      <span className="text-gray-500 font-medium text-[10px]">{edu.year}</span>
+              {generationResult.tailoredData.education && generationResult.tailoredData.education.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Education
+                  </h3>
+                  {generationResult.tailoredData.education.map((edu, index) => (
+                    <div key={index} className="space-y-0.5 text-xs">
+                      <div className="flex items-center justify-between font-bold text-gray-900">
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{edu.degree} {edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ""}</span>
+                        <span className="text-gray-500 font-medium text-[10px]">{edu.year}</span>
+                      </div>
+                      <p className="text-gray-600">{edu.school} {edu.grade ? `(Grade: ${edu.grade})` : ""}</p>
+                      {edu.coursework && edu.coursework.length > 0 && (
+                        <p className="text-[10px] text-gray-500 mt-0.5"><span className="font-semibold text-gray-700">Coursework:</span> {edu.coursework.join(', ')}</p>
+                      )}
                     </div>
-                    <p className="text-gray-600">{edu.school}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Certifications */}
+              {generationResult.tailoredData.certifications && generationResult.tailoredData.certifications.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Certifications
+                  </h3>
+                  {generationResult.tailoredData.certifications.map((cert, index) => (
+                    <div key={index} className="space-y-0.5 text-xs">
+                      <div className="flex items-center justify-between font-bold text-gray-900">
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{cert.name}</span>
+                        {cert.issueDate && <span className="text-gray-500 font-medium text-[10px]">{cert.issueDate}</span>}
+                      </div>
+                      <p className="text-gray-600">Issuer: {cert.issuer} {cert.credentialUrl ? `(${cert.credentialUrl})` : ""}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Achievements */}
+              {generationResult.tailoredData.achievements && generationResult.tailoredData.achievements.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Achievements
+                  </h3>
+                  {generationResult.tailoredData.achievements.map((ach, index) => (
+                    <div key={index} className="space-y-0.5 text-xs">
+                      <div className="flex items-center justify-between font-bold text-gray-900">
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{ach.title} ({ach.category})</span>
+                        {ach.date && <span className="text-gray-500 font-medium text-[10px]">{ach.date}</span>}
+                      </div>
+                      <p className="text-gray-600 leading-relaxed">
+                        {ach.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Skills Grid */}
-              <div className="space-y-4">
-                <h3 className="text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-1">
+              <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                <h3 className={
+                  selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                  selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                  "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                }>
                   Technical Skills
                 </h3>
                 <div className="flex flex-wrap gap-2">

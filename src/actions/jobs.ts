@@ -112,6 +112,36 @@ const mockJobs: JobListing[] = [
     source: "Indeed",
     jobUrl: "https://startup.com/careers/react-developer",
   },
+  {
+    id: "job-7",
+    title: "Software Developer",
+    company: "TechNova Solutions",
+    location: "Bangalore, Karnataka, India",
+    salary: "₹8,00,000 - ₹12,00,000",
+    experience: "Entry",
+    remote: true,
+    skills: ["JavaScript", "TypeScript", "React", "Node.js"],
+    description: "We are hiring a passionate Software Developer to join our fully remote team based out of Bangalore. You will be building scalable web applications, writing automated tests, and collaborating with cross-functional teams. Great opportunity for entry-level developers to grow.",
+    atsScore: 89,
+    postedAt: "3 hours ago",
+    source: "LinkedIn",
+    jobUrl: "https://technova.com/careers/software-developer-blr",
+  },
+  {
+    id: "job-8",
+    title: "Frontend Software Engineer",
+    company: "Global Innovations",
+    location: "Bangalore, Karnataka, India",
+    salary: "₹10,00,000 - ₹15,00,000",
+    experience: "Mid",
+    remote: false,
+    skills: ["React", "Next.js", "Tailwind CSS"],
+    description: "Looking for a Frontend Software Engineer to revamp our enterprise dashboard. You will be working closely with the design team in our Bangalore office to implement pixel-perfect user interfaces.",
+    atsScore: 82,
+    postedAt: "1 day ago",
+    source: "Indeed",
+    jobUrl: "https://globalinnovations.com/careers/frontend-engineer",
+  },
 ];
 
 // Helper to get authenticated profile
@@ -137,7 +167,7 @@ async function getAuthenticatedProfile() {
 }
 
 /**
- * Searches and filters mock jobs
+ * Searches and filters jobs (using JSearch API if API key is provided, otherwise mock data)
  */
 export async function searchJobs(
   query: string = "",
@@ -153,64 +183,155 @@ export async function searchJobs(
   pageSize: number = 4
 ) {
   try {
-    let filtered = [...mockJobs];
+    const apiKey = process.env.JSEARCH_API_KEY;
 
-    // Query filter (matches title, company, skills, or description)
-    if (query) {
-      const q = query.toLowerCase();
-      filtered = filtered.filter(
-        (job) =>
-          job.title.toLowerCase().includes(q) ||
-          job.company.toLowerCase().includes(q) ||
-          job.description.toLowerCase().includes(q) ||
-          job.skills.some((s) => s.toLowerCase().includes(q))
-      );
+    if (!apiKey) {
+      // Graceful fallback to mock data search
+      let filtered = [...mockJobs];
+
+      if (query) {
+        const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+        filtered = filtered.filter((job) => {
+          const searchableText = `${job.title} ${job.company} ${job.description} ${job.skills.join(" ")}`.toLowerCase();
+          return terms.every(term => searchableText.includes(term));
+        });
+      }
+
+      if (filters.location) {
+        const loc = filters.location.toLowerCase();
+        filtered = filtered.filter((job) => job.location.toLowerCase().includes(loc));
+      }
+
+      if (filters.experience && filters.experience !== "all") {
+        filtered = filtered.filter(
+          (job) => job.experience.toLowerCase() === filters.experience?.toLowerCase()
+        );
+      }
+
+      if (filters.remote) {
+        filtered = filtered.filter((job) => job.remote === true);
+      }
+
+      if (filters.company && filters.company !== "all") {
+        filtered = filtered.filter(
+          (job) => job.company.toLowerCase() === filters.company?.toLowerCase()
+        );
+      }
+
+      if (filters.skills && filters.skills.length > 0) {
+        filtered = filtered.filter((job) =>
+          filters.skills?.every((s) => job.skills.includes(s))
+        );
+      }
+
+      const totalCount = filtered.length;
+      const startIndex = (page - 1) * pageSize;
+      const paginated = filtered.slice(startIndex, startIndex + pageSize);
+      const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+      return {
+        jobs: paginated,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+      };
     }
 
-    // Location filter
-    if (filters.location) {
-      const loc = filters.location.toLowerCase();
-      filtered = filtered.filter((job) => job.location.toLowerCase().includes(loc));
+    // --- JSearch API Search ---
+    const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
+    const searchQuery = (query || "Software Engineer").trim();
+    // Append location to query for best JSearch results
+    const fullQuery = filters.location
+      ? `${searchQuery} in ${filters.location}`
+      : searchQuery;
+    url.searchParams.set("query", fullQuery);
+    url.searchParams.set("page", page.toString());
+    url.searchParams.set("num_pages", "1");
+    url.searchParams.set("country", "in"); // default to India
+
+    if (filters.remote) {
+      url.searchParams.set("remote_jobs_only", "true");
     }
 
-    // Experience filter
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "jsearch.p.rapidapi.com",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`JSearch API failed with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    let rawJobs = [];
+    if (data.data && Array.isArray(data.data.jobs)) {
+      rawJobs = data.data.jobs;
+    } else if (Array.isArray(data.data)) {
+      rawJobs = data.data; // fallback for older API format
+    }
+
+    let mappedJobs: JobListing[] = rawJobs.map((job: any) => {
+      const location = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(", ") || "Remote";
+      const salary = job.job_min_salary && job.job_max_salary 
+        ? `${job.job_salary_currency || "$"} ${job.job_min_salary.toLocaleString()} - ${job.job_max_salary.toLocaleString()}`
+        : "Salary Undisclosed";
+
+      let experience: "Entry" | "Mid" | "Senior" | "Lead" = "Mid";
+      if (job.job_required_experience?.no_experience_required) {
+        experience = "Entry";
+      } else if (job.job_required_experience?.required_experience_in_months) {
+        const months = job.job_required_experience.required_experience_in_months;
+        if (months < 24) experience = "Entry";
+        else if (months < 60) experience = "Mid";
+        else if (months < 96) experience = "Senior";
+        else experience = "Lead";
+      }
+
+      // Generate simulation-friendly random ATS score
+      const atsScore = Math.floor(Math.random() * 20) + 70;
+
+      return {
+        id: job.job_id,
+        title: job.job_title,
+        company: job.employer_name,
+        location,
+        salary,
+        experience,
+        remote: job.job_is_remote || false,
+        skills: ["React", "TypeScript", "Next.js", "Node.js", "Tailwind CSS"], // Demo keywords
+        description: job.job_description || "",
+        atsScore,
+        postedAt: job.job_posted_at_datetime_utc 
+          ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString()
+          : "Recently",
+        source: "LinkedIn",
+        jobUrl: job.job_apply_link || job.job_google_link || "https://google.com/jobs",
+      };
+    });
+
+    // Secondary filter for experience on JSearch results
     if (filters.experience && filters.experience !== "all") {
-      filtered = filtered.filter(
+      mappedJobs = mappedJobs.filter(
         (job) => job.experience.toLowerCase() === filters.experience?.toLowerCase()
       );
     }
 
-    // Remote filter
-    if (filters.remote) {
-      filtered = filtered.filter((job) => job.remote === true);
-    }
-
-    // Company filter
-    if (filters.company && filters.company !== "all") {
-      filtered = filtered.filter(
-        (job) => job.company.toLowerCase() === filters.company?.toLowerCase()
-      );
-    }
-
-    // Skills filter
-    if (filters.skills && filters.skills.length > 0) {
-      filtered = filtered.filter((job) =>
-        filters.skills?.every((s) => job.skills.includes(s))
-      );
-    }
-
-    // Pagination
-    const totalCount = filtered.length;
-    const startIndex = (page - 1) * pageSize;
-    const paginated = filtered.slice(startIndex, startIndex + pageSize);
-    const totalPages = Math.ceil(totalCount / pageSize);
+    const totalCount = mappedJobs.length;
+    const paginated = mappedJobs.slice(0, pageSize);
+    const totalPages = totalCount >= pageSize ? page + 1 : page;
 
     return {
       jobs: paginated,
       pagination: {
         page,
         pageSize,
-        totalCount,
+        totalCount: totalCount * page, // Estimated count since API page-based
         totalPages,
       },
     };
@@ -297,14 +418,20 @@ export async function getBookmarkedJobUrls() {
 /**
  * Promotes a bookmarked job to APPLIED status in the database
  */
-export async function applyToBookmarkedJob(jobUrl: string) {
+export async function applyToBookmarkedJob(job: {
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  jobUrl: string;
+}) {
   try {
     const profile = await getAuthenticatedProfile();
 
     const existing = await prisma.jobApplication.findFirst({
       where: {
         profileId: profile.id,
-        jobUrl,
+        jobUrl: job.jobUrl,
       },
     });
 
@@ -317,18 +444,14 @@ export async function applyToBookmarkedJob(jobUrl: string) {
         },
       });
     } else {
-      // Find job from mock set
-      const match = mockJobs.find((j) => j.jobUrl === jobUrl);
-      if (!match) throw new Error("Job not found");
-
       await prisma.jobApplication.create({
         data: {
           profileId: profile.id,
-          companyName: match.company,
-          jobTitle: match.title,
-          jobUrl: match.jobUrl,
-          location: match.location,
-          salary: match.salary,
+          companyName: job.company,
+          jobTitle: job.title,
+          jobUrl: job.jobUrl,
+          location: job.location,
+          salary: job.salary,
           status: "APPLIED",
           appliedAt: new Date(),
           notes: "Applied directly via Job Search board.",

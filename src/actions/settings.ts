@@ -35,7 +35,7 @@ const DEFAULT_PREFERENCES: SettingsPreferences = {
   experienceYears: 5,
   remotePreferences: "Hybrid/Remote",
   resumeTemplate: "Elegant Tech",
-  openaiApiKey: "",
+  openaiApiKey: "sk-proj-simulated",
   emailDigest: true,
   pushNotifications: true,
   autoApplyScore: 85,

@@ -33,7 +33,10 @@ export function ResumeUploadZone({ onUploadComplete }: ResumeUploadZoneProps) {
 
     setIsUploading(true);
     try {
-      const res = await uploadResume(file.name, file.size);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await uploadResume(formData);
       if (res.success) {
         if (onUploadComplete) {
           onUploadComplete();
@@ -93,7 +96,7 @@ export function ResumeUploadZone({ onUploadComplete }: ResumeUploadZoneProps) {
 
       {isUploading ? (
         <div className="space-y-3 flex flex-col items-center animate-pulse">
-          <div className="h-12 w-12 rounded-full bg-violet-600/10 flex items-center justify-center text-violet-600">
+          <div className="h-12 w-12 rounded-full bg-accent/10 flex items-center justify-center text-accent">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
           <div className="space-y-1">
