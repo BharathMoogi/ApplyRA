@@ -65,7 +65,7 @@ export class GroqProvider implements AIProvider {
 
   async generateText(options: AIGenerateTextOptions): Promise<AIResponse<string>> {
     const startTime = Date.now();
-    const model = options.model || 'llama-3.3-70b-versatile';
+    const model = options.model || 'llama-3.1-8b-instant';
     const timeout = options.timeoutMs || 30000;
 
     try {
@@ -119,7 +119,7 @@ export class GroqProvider implements AIProvider {
 
   async generateObject<T>(options: AIGenerateObjectOptions): Promise<AIResponse<T>> {
     const startTime = Date.now();
-    const model = options.model || 'llama-3.3-70b-versatile';
+    const model = options.model || 'llama-3.1-8b-instant';
     const timeout = options.timeoutMs || 30000;
     const maxValidationRetries = options.maxRetries || 3;
 
@@ -197,7 +197,7 @@ export class GroqProvider implements AIProvider {
   }
 
   async streamText(options: AIGenerateTextOptions): Promise<AIResponse<AIStreamTextResult>> {
-    const model = options.model || 'llama-3.3-70b-versatile';
+    const model = options.model || 'llama-3.1-8b-instant';
     const timeout = options.timeoutMs || 30000;
 
     try {
