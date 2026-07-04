@@ -129,7 +129,7 @@ export async function runAgentStep(
       const applyRes = await AutoApplyAgent.apply(job.jobUrl, {
         fullName: profile.fullName || "Applicant",
         email: user.email!,
-        phone: profile.phone || "",
+        phone: "",
         coverLetterText: coverLetterText
       });
       
