@@ -18,6 +18,56 @@ interface Resume {
   updatedAt: Date;
 }
 
+function parseMonthYear(str: string): string {
+  if (!str) return "";
+  const cleaned = str.trim();
+  if (cleaned.toLowerCase() === "present") return "present";
+  
+  // Check if it matches YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(cleaned)) return cleaned;
+  
+  const parts = cleaned.split(/\s+/);
+  if (parts.length === 2) {
+    const monthStr = parts[0].toLowerCase();
+    const year = parts[1];
+    if (/^\d{4}$/.test(year)) {
+      const months: Record<string, string> = {
+        jan: "01", january: "01",
+        feb: "02", february: "02",
+        mar: "03", march: "03",
+        apr: "04", april: "04",
+        may: "05",
+        jun: "06", june: "06",
+        jul: "07", july: "07",
+        aug: "08", august: "08",
+        sep: "09", september: "09",
+        oct: "10", october: "10",
+        nov: "11", november: "11",
+        dec: "12", december: "12"
+      };
+      const month = months[monthStr.substring(0, 3)];
+      if (month) {
+        return `${year}-${month}`;
+      }
+    }
+  } else if (parts.length === 1 && /^\d{4}$/.test(cleaned)) {
+    return `${cleaned}-01`;
+  }
+  return "";
+}
+
+function formatMonthYear(val: string): string {
+  if (!val) return "";
+  if (val === "present") return "Present";
+  const [year, month] = val.split("-");
+  if (!year || !month) return val;
+  
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthIdx = parseInt(month, 10) - 1;
+  const monthStr = months[monthIdx] || "";
+  return `${monthStr} ${year}`;
+}
+
 interface ResumeEditorProps {
   resume: Resume | null;
   isOpen: boolean;
@@ -426,13 +476,64 @@ export function ResumeEditor({ resume, isOpen, onClose, onSaveComplete }: Resume
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Duration (e.g. 2021 - 2023)</Label>
-                    <Input
-                      value={exp.duration}
-                      onChange={(e) => handleExperienceChange(index, "duration", e.target.value)}
-                    />
-                  </div>
+                  {(() => {
+                    const parseDuration = (duration: string) => {
+                      const parts = (duration || "").split(/\s*[-–to]\s*/i);
+                      const startStr = parts[0] || "";
+                      const endStr = parts[1] || "";
+                      
+                      const startVal = parseMonthYear(startStr);
+                      const endVal = parseMonthYear(endStr);
+                      const isPresent = endStr.toLowerCase().trim() === "present";
+                      
+                      return { startVal, endVal, isPresent };
+                    };
+
+                    const { startVal, endVal, isPresent } = parseDuration(exp.duration);
+
+                    const updateDuration = (start: string, end: string, present: boolean) => {
+                      const startFormatted = formatMonthYear(start);
+                      const endFormatted = present ? "Present" : formatMonthYear(end);
+                      const durationString = startFormatted && endFormatted 
+                        ? `${startFormatted} - ${endFormatted}` 
+                        : startFormatted || endFormatted || "";
+                      
+                      handleExperienceChange(index, "duration", durationString);
+                    };
+
+                    return (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Start Month & Year</Label>
+                          <Input
+                            type="month"
+                            value={startVal}
+                            onChange={(e) => updateDuration(e.target.value, endVal, isPresent)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>End Month & Year</Label>
+                            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none text-muted-foreground hover:text-foreground transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isPresent}
+                                onChange={(e) => updateDuration(startVal, endVal, e.target.checked)}
+                                className="rounded border-muted bg-background text-primary focus:ring-ring focus:ring-offset-background h-3.5 w-3.5 transition-all"
+                              />
+                              Currently work here
+                            </label>
+                          </div>
+                          <Input
+                            type="month"
+                            disabled={isPresent}
+                            value={isPresent ? "" : endVal}
+                            onChange={(e) => updateDuration(startVal, e.target.value, false)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
