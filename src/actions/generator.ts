@@ -64,68 +64,70 @@ export async function generateCustomizedResume(
 
     const masterData = JSON.parse(sourceResume.content) as StructuredResumeData;
 
-    // Define strict Zod validation schema for our resume tailoring response
+    // Define Zod validation schema - lenient enough for fast LLMs like Groq
     const TailoredResumeResultSchema = z.object({
-      originalScore: z.number().min(0).max(100),
-      optimizedScore: z.number().min(0).max(100),
-      matchedKeywords: z.array(z.string()),
-      missingKeywords: z.array(z.string()),
-      optimizedPoints: z.array(z.object({
-        original: z.string(),
-        optimized: z.string()
-      })),
+      originalScore: z.number().min(0).max(100).default(0),
+      optimizedScore: z.number().min(0).max(100).default(0),
+      matchedKeywords: z.array(z.string()).default([]),
+      missingKeywords: z.array(z.string()).default([]),
+      optimizedPoints: z.array(
+        z.union([
+          z.object({ original: z.string(), optimized: z.string() }),
+          z.string().transform(s => ({ original: s, optimized: s }))
+        ])
+      ).default([]),
       tailoredData: z.object({
         personal: z.object({
-          name: z.string(),
-          email: z.string(),
-          phone: z.string(),
-          website: z.string(),
+          name: z.string().default(""),
+          email: z.string().default(""),
+          phone: z.string().default(""),
+          website: z.string().default(""),
           linkedin: z.string().optional(),
           github: z.string().optional(),
           portfolio: z.string().optional(),
           location: z.string().optional()
         }),
         experience: z.array(z.object({
-          company: z.string(),
-          role: z.string(),
-          duration: z.string(),
-          description: z.string(),
+          company: z.string().default(""),
+          role: z.string().default(""),
+          duration: z.string().default(""),
+          description: z.string().default(""),
           location: z.string().optional(),
           employmentType: z.string().optional()
-        })),
+        })).default([]),
         education: z.array(z.object({
-          school: z.string(),
-          degree: z.string(),
-          year: z.string(),
+          school: z.string().default(""),
+          degree: z.string().default(""),
+          year: z.string().default(""),
           fieldOfStudy: z.string().optional(),
           grade: z.string().optional(),
           startDate: z.string().optional(),
           endDate: z.string().optional(),
           coursework: z.array(z.string()).optional()
-        })),
-        skills: z.array(z.string()),
+        })).default([]),
+        skills: z.array(z.string()).default([]),
         summary: z.string().optional(),
         projects: z.array(z.object({
-          name: z.string(),
-          description: z.string(),
+          name: z.string().default(""),
+          description: z.string().default(""),
           technologies: z.array(z.string()).optional(),
           duration: z.string().optional(),
           githubUrl: z.string().optional(),
           liveUrl: z.string().optional()
-        })).optional(),
+        })).optional().default([]),
         certifications: z.array(z.object({
-          name: z.string(),
-          issuer: z.string(),
+          name: z.string().default(""),
+          issuer: z.string().default(""),
           issueDate: z.string().optional(),
           expiryDate: z.string().optional(),
           credentialUrl: z.string().optional()
-        })).optional(),
+        })).optional().default([]),
         achievements: z.array(z.object({
-          title: z.string(),
-          category: z.enum(["Award", "Leadership", "Competition", "Sport", "Publication", "Extracurricular", "Other"]),
-          description: z.string(),
+          title: z.string().default(""),
+          category: z.string().default("Other"),
+          description: z.string().default(""),
           date: z.string().optional()
-        })).optional()
+        })).optional().default([])
       })
     });
 
