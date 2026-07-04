@@ -20,9 +20,6 @@ export interface AgentStepResult {
   logs: string[];
 }
 
-// Tech keywords dictionary to simulate matching checks
-const TECH_TAGS = ["React", "TypeScript", "Next.js", "Tailwind CSS", "PostgreSQL", "Go"];
-
 /**
  * Runs a single step of the autonomous AI Agent workflow:
  * Scans, analyzes matching keywords, generates tailored content,
@@ -37,6 +34,7 @@ export async function runAgentStep(
     salary: string;
     skills: string[];
     jobUrl: string;
+    description?: string;
   },
   threshold: number
 ): Promise<{ success: boolean; result?: AgentStepResult; error?: string }> {
@@ -70,34 +68,66 @@ export async function runAgentStep(
     const time = () => new Date().toLocaleTimeString("en-US", { hour12: false });
 
     logs.push(`[${time()}] [Info] Found job listing: "${job.title}" at ${job.company}`);
-    logs.push(`[${time()}] [Analyze] Extracting requirement keywords dynamically...`);
+    logs.push(`[${time()}] [Analyze] Analyzing the complete Job Description...`);
 
-    const extracted = await ATSKeywordExtractor.extractKeywords(
-      `Job Title: ${job.title}\nCompany: ${job.company}\nDescription/Skills:\n${job.skills.join(", ")}`
-    );
+    const fullJobDescription = job.description || `Job Title: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location}\nSkills/Requirements:\n${job.skills.join("\n")}`;
 
-    const extractedTags = [...extracted.technologies, ...extracted.skills].slice(0, 8);
-    logs.push(`[${time()}] [Analyze] Identified dynamic keywords: ${extractedTags.join(", ") || "none"}`);
+    // Extract keywords, skills, responsibilities, qualifications
+    const extracted = await ATSKeywordExtractor.extractKeywords(fullJobDescription);
+
+    logs.push(`[${time()}] [Analyze] Extracted required skills: ${(extracted.skills || []).slice(0, 5).join(", ")}`);
+    logs.push(`[${time()}] [Analyze] Extracted qualifications: ${(extracted.qualifications || []).slice(0, 5).join(", ")}`);
+    logs.push(`[${time()}] [Analyze] Extracted responsibilities: ${(extracted.responsibilities || []).slice(0, 3).join("; ")}`);
+    logs.push(`[${time()}] [Analyze] Extracted ATS technologies/keywords: ${(extracted.technologies || []).slice(0, 8).join(", ")}`);
+
     logs.push(`[${time()}] [Optimizer] Starting live ATS keyword optimization loop...`);
 
-    const tailoringRes = await generateCustomizedResume(
-      defaultResume.id,
-      `Job Title: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location}\nSkills/Requirements:\n${job.skills.join("\n")}`
-    );
+    let tailoredData: any = null;
+    let atsScore = 0;
+    let passed = false;
+    let matchedKeywords: string[] = [];
+    let missingKeywords: string[] = [];
+    let optimizedPoints: { original: string; optimized: string }[] = [];
+    let attempts = 0;
+    const maxAttempts = 3;
 
-    if (!tailoringRes.success || !tailoringRes.result) {
-      logs.push(`[${time()}] [Optimizer Error] Customizer failed: ${tailoringRes.error}`);
-      return { success: false, error: tailoringRes.error || "Failed to customize resume" };
+    while (attempts < maxAttempts) {
+      attempts++;
+      logs.push(`[${time()}] [Optimizer] Optimization Attempt ${attempts} of ${maxAttempts}...`);
+
+      const tailoringRes = await generateCustomizedResume(
+        defaultResume.id,
+        fullJobDescription,
+        tailoredData || undefined,
+        missingKeywords.length > 0 ? missingKeywords : undefined
+      );
+
+      if (!tailoringRes.success || !tailoringRes.result) {
+        logs.push(`[${time()}] [Optimizer Error] Customizer failed on attempt ${attempts}: ${tailoringRes.error}`);
+        return { success: false, error: tailoringRes.error || "Failed to customize resume" };
+      }
+
+      const res = tailoringRes.result;
+      atsScore = res.optimizedScore;
+      tailoredData = res.tailoredData;
+      matchedKeywords = res.matchedKeywords;
+      missingKeywords = res.missingKeywords;
+      optimizedPoints = res.optimizedPoints;
+
+      logs.push(`[${time()}] [ATS Score] Calculated score: ${atsScore}% (Target: >= ${threshold}%)`);
+
+      if (atsScore >= threshold) {
+        passed = true;
+        logs.push(`[${time()}] [Success] Compatibility meets minimum threshold limit (>= ${threshold}%)`);
+        break;
+      } else {
+        if (attempts < maxAttempts) {
+          logs.push(`[${time()}] [Optimizer] Score (${atsScore}%) is below target (${threshold}%). Refining resume with missing keywords: ${missingKeywords.slice(0, 5).join(", ")}...`);
+        }
+      }
     }
 
-    const { originalScore, optimizedScore, matchedKeywords, missingKeywords, tailoredData } = tailoringRes.result;
-    const atsScore = optimizedScore;
-    const passed = atsScore >= threshold;
-
-    logs.push(`[${time()}] [ATS Score] Calculated score: ${atsScore}% (Target: >= ${threshold}%)`);
-
     if (passed) {
-      logs.push(`[${time()}] [Success] Compatibility meets minimum threshold limit (>= ${threshold}%)`);
       logs.push(`[${time()}] [Optimizer] Customizing master resume to prioritize matched keywords...`);
       
       const newResume = await prisma.resume.create({
@@ -111,13 +141,12 @@ export async function runAgentStep(
       logs.push(`[${time()}] [Database] Saved customized version as: "${newResume.title}"`);
       
       logs.push(`[${time()}] [Optimizer] Formulating custom cover letter for ${job.company}...`);
-      logs.push(`[${time()}] [Optimizer] Formulating custom cover letter for ${job.company}...`);
       let coverLetterText = "";
       try {
         coverLetterText = await CoverLetterAgent.generateTailoredCoverLetter(
           job.company,
           job.title,
-          job.skills.join(", "),
+          fullJobDescription,
           tailoredData as any,
           profile.fullName || user.email || "Applicant"
         );
@@ -126,6 +155,7 @@ export async function runAgentStep(
         logs.push(`[${time()}] [Warning] Failed to generate cover letter: ${clErr.message}`);
       }
 
+      logs.push(`[${time()}] [Headless Browser] Triggering automatic apply script...`);
       const applyRes = await AutoApplyAgent.apply(job.jobUrl, {
         fullName: profile.fullName || "Applicant",
         email: user.email!,
@@ -142,13 +172,15 @@ export async function runAgentStep(
         },
       });
 
+      const notesMessage = `Auto-submitted by AI Agent via ${applyRes.portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${newResume.id}`;
+
       if (existing) {
         await prisma.jobApplication.update({
           where: { id: existing.id },
           data: {
             status: "APPLIED",
             appliedAt: new Date(),
-            notes: `Auto-submitted by AI Agent via ${applyRes.portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${newResume.id}`,
+            notes: notesMessage,
           },
         });
       } else {
@@ -162,7 +194,7 @@ export async function runAgentStep(
             salary: job.salary,
             status: "APPLIED",
             appliedAt: new Date(),
-            notes: `Auto-submitted by AI Agent via ${applyRes.portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${newResume.id}`,
+            notes: notesMessage,
           },
         });
       }
@@ -186,7 +218,7 @@ export async function runAgentStep(
         logs.push(`[${time()}] [Email] Error: ${emailErr?.message || JSON.stringify(emailErr)}`);
       }
     } else {
-      logs.push(`[${time()}] [Skipped] Compatibility score (${atsScore}%) below threshold (${threshold}%)`);
+      logs.push(`[${time()}] [Skipped] Compatibility score (${atsScore}%) below threshold (${threshold}%) after ${attempts} attempts.`);
       logs.push(`[${time()}] [Info] Moving to next matching job.`);
     }
 
@@ -290,7 +322,7 @@ export async function runAutomationEngine(): Promise<{
       const job = ranked.job;
       logs.push(`\n--- Automating Target: "${job.title}" at ${job.company} ---`);
       
-      const stepRes = await runAgentStep(job, 80);
+      const stepRes = await runAgentStep(job, 75);
       
       if (!stepRes.success) {
         logs.push(`[${time()}] [Error] Job processing failed: ${stepRes.error}`);
@@ -333,4 +365,3 @@ export async function runAutomationEngine(): Promise<{
     };
   }
 }
-
