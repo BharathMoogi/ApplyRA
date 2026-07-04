@@ -146,6 +146,12 @@ export default function AIAgentPage() {
         
         const stepResult = await runAgentStep(job, threshold);
         
+        if (!stepResult.success) {
+          addLog(`[${timeStr()}] [Error] Failed to process job ${job.company}: ${stepResult.error}`);
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+
         if (stepResult.success && stepResult.result) {
           const resObj = stepResult.result;
           
