@@ -39,8 +39,8 @@ export default function AIAgentPage() {
   // Settings
   const [roleQuery, setRoleQuery] = useState("Frontend");
   const [locationQuery, setLocationQuery] = useState("Bangalore");
-  const [threshold, setThreshold] = useState(85);
-  const [daemonThreshold, setDaemonThreshold] = useState(90); // default 90% required
+  const [threshold, setThreshold] = useState(70);
+  const [daemonThreshold, setDaemonThreshold] = useState(75); // default 75% required
   
   // Active indicators
   const [isGmailLinked, setIsGmailLinked] = useState(false);
