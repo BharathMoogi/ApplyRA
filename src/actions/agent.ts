@@ -268,7 +268,7 @@ export async function runAutomationEngine(): Promise<{
 
     let masterResumeData;
     try {
-      masterResumeData = JSON.parse(defaultResume.content);
+      masterResumeData = JSON.parse(defaultResume.content || "{}");
     } catch {
       masterResumeData = { skills: [] };
     }
