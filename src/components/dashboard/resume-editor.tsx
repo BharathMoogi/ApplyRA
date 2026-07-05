@@ -20,7 +20,7 @@ interface Resume {
 
 function parseMonthYear(str: string): string {
   if (!str) return "";
-  const cleaned = str.trim();
+  const cleaned = str.trim().replace(/,/g, "");
   if (cleaned.toLowerCase() === "present") return "present";
   
   // Check if it matches YYYY-MM
@@ -28,9 +28,17 @@ function parseMonthYear(str: string): string {
   
   const parts = cleaned.split(/\s+/);
   if (parts.length === 2) {
-    const monthStr = parts[0].toLowerCase();
-    const year = parts[1];
-    if (/^\d{4}$/.test(year)) {
+    let monthStr = "";
+    let year = "";
+    if (/^\d{4}$/.test(parts[0])) {
+      year = parts[0];
+      monthStr = parts[1].toLowerCase();
+    } else if (/^\d{4}$/.test(parts[1])) {
+      year = parts[1];
+      monthStr = parts[0].toLowerCase();
+    }
+    
+    if (year) {
       const months: Record<string, string> = {
         jan: "01", january: "01",
         feb: "02", february: "02",
@@ -50,8 +58,10 @@ function parseMonthYear(str: string): string {
         return `${year}-${month}`;
       }
     }
-  } else if (parts.length === 1 && /^\d{4}$/.test(cleaned)) {
-    return `${cleaned}-01`;
+  } else if (parts.length === 1) {
+    if (/^\d{4}$/.test(cleaned)) {
+      return `${cleaned}-01`;
+    }
   }
   return "";
 }
@@ -628,31 +638,71 @@ export function ResumeEditor({ resume, isOpen, onClose, onSaveComplete }: Resume
                     </div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label>Start Date</Label>
-                      <Input
-                        placeholder="e.g. 2019 / Aug 2019"
-                        value={edu.startDate || ""}
-                        onChange={(e) => handleEducationChange(index, "startDate", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>End Date / Graduation</Label>
-                      <Input
-                        placeholder="e.g. 2023 / Present"
-                        value={edu.endDate || ""}
-                        onChange={(e) => handleEducationChange(index, "endDate", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Graduation Year</Label>
-                      <Input
-                        value={edu.year}
-                        onChange={(e) => handleEducationChange(index, "year", e.target.value)}
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const startVal = parseMonthYear(edu.startDate || "");
+                    const endVal = parseMonthYear(edu.endDate || "");
+                    const isPresent = (edu.endDate || "").toLowerCase().trim() === "present";
+
+                    const updateEduDates = (start: string, end: string, present: boolean) => {
+                      const startFormatted = formatMonthYear(start);
+                      const endFormatted = present ? "Present" : formatMonthYear(end);
+                      
+                      handleEducationChange(index, "startDate", startFormatted);
+                      handleEducationChange(index, "endDate", endFormatted);
+                      
+                      const finalEnd = present ? "" : end;
+                      if (finalEnd) {
+                        const yearPart = finalEnd.split("-")[0];
+                        if (yearPart && /^\d{4}$/.test(yearPart)) {
+                          handleEducationChange(index, "year", yearPart);
+                        }
+                      } else if (present) {
+                        handleEducationChange(index, "year", "Present");
+                      }
+                    };
+
+                    return (
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Start Date</Label>
+                          <Input
+                            type="month"
+                            value={startVal}
+                            onChange={(e) => updateEduDates(e.target.value, endVal, isPresent)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>End Date</Label>
+                            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none text-muted-foreground hover:text-foreground transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isPresent}
+                                onChange={(e) => updateEduDates(startVal, endVal, e.target.checked)}
+                                className="rounded border-muted bg-background text-primary focus:ring-ring focus:ring-offset-background h-3.5 w-3.5 transition-all"
+                              />
+                              Present
+                            </label>
+                          </div>
+                          <Input
+                            type="month"
+                            disabled={isPresent}
+                            value={isPresent ? "" : endVal}
+                            onChange={(e) => updateEduDates(startVal, e.target.value, false)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Graduation Year</Label>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 2023"
+                            value={edu.year || ""}
+                            onChange={(e) => handleEducationChange(index, "year", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-2">
                     <Label>Coursework (comma separated)</Label>
@@ -799,12 +849,63 @@ export function ResumeEditor({ resume, isOpen, onClose, onSaveComplete }: Resume
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Duration (if available)</Label>
-                      <Input
-                        placeholder="e.g. Fall 2023 / 2 months"
-                        value={proj.duration || ""}
-                        onChange={(e) => handleProjectChange(index, "duration", e.target.value)}
-                      />
+                      {(() => {
+                        const parseProjDuration = (duration: string) => {
+                          const parts = (duration || "").split(/\s*[-–to]\s*/i);
+                          const startStr = parts[0] || "";
+                          const endStr = parts[1] || "";
+                          
+                          const startVal = parseMonthYear(startStr);
+                          const endVal = parseMonthYear(endStr);
+                          const isPresent = endStr.toLowerCase().trim() === "present";
+                          
+                          return { startVal, endVal, isPresent };
+                        };
+
+                        const { startVal, endVal, isPresent } = parseProjDuration(proj.duration || "");
+
+                        const updateProjDuration = (start: string, end: string, present: boolean) => {
+                          const startFormatted = formatMonthYear(start);
+                          const endFormatted = present ? "Present" : formatMonthYear(end);
+                          const durationString = startFormatted && endFormatted 
+                            ? `${startFormatted} - ${endFormatted}` 
+                            : startFormatted || endFormatted || "";
+                          
+                          handleProjectChange(index, "duration", durationString);
+                        };
+
+                        return (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>Duration (Date Range)</Label>
+                              <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none text-muted-foreground hover:text-foreground transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={isPresent}
+                                  onChange={(e) => updateProjDuration(startVal, endVal, e.target.checked)}
+                                  className="rounded border-muted bg-background text-primary focus:ring-ring focus:ring-offset-background h-3.5 w-3.5 transition-all"
+                                />
+                                Ongoing (Present)
+                              </label>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Input
+                                type="month"
+                                placeholder="Start Date"
+                                value={startVal}
+                                onChange={(e) => updateProjDuration(e.target.value, endVal, isPresent)}
+                              />
+                              <Input
+                                type="month"
+                                placeholder="End Date"
+                                disabled={isPresent}
+                                value={isPresent ? "" : endVal}
+                                onChange={(e) => updateProjDuration(startVal, e.target.value, false)}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -895,24 +996,52 @@ export function ResumeEditor({ resume, isOpen, onClose, onSaveComplete }: Resume
                     />
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Issue Date</Label>
-                      <Input
-                        placeholder="e.g. Jan 2023"
-                        value={cert.issueDate || ""}
-                        onChange={(e) => handleCertificationChange(index, "issueDate", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Expiry Date (if any)</Label>
-                      <Input
-                        placeholder="e.g. Jan 2026 / No Expiry"
-                        value={cert.expiryDate || ""}
-                        onChange={(e) => handleCertificationChange(index, "expiryDate", e.target.value)}
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const issueVal = parseMonthYear(cert.issueDate || "");
+                    const expiryVal = parseMonthYear(cert.expiryDate || "");
+                    const isNoExpiry = !cert.expiryDate || cert.expiryDate.toLowerCase().trim() === "no expiry";
+
+                    const updateCertDates = (issue: string, expiry: string, noExp: boolean) => {
+                      const issueFormatted = formatMonthYear(issue);
+                      const expiryFormatted = noExp ? "No Expiry" : formatMonthYear(expiry);
+                      
+                      handleCertificationChange(index, "issueDate", issueFormatted);
+                      handleCertificationChange(index, "expiryDate", expiryFormatted);
+                    };
+
+                    return (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Issue Date</Label>
+                          <Input
+                            type="month"
+                            value={issueVal}
+                            onChange={(e) => updateCertDates(e.target.value, expiryVal, isNoExpiry)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>Expiry Date</Label>
+                            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none text-muted-foreground hover:text-foreground transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isNoExpiry}
+                                onChange={(e) => updateCertDates(issueVal, expiryVal, e.target.checked)}
+                                className="rounded border-muted bg-background text-primary focus:ring-ring focus:ring-offset-background h-3.5 w-3.5 transition-all"
+                              />
+                              No Expiry
+                            </label>
+                          </div>
+                          <Input
+                            type="month"
+                            disabled={isNoExpiry}
+                            value={isNoExpiry ? "" : expiryVal}
+                            onChange={(e) => updateCertDates(issueVal, e.target.value, false)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-2">
                     <Label>Credential Link / URL</Label>
@@ -977,11 +1106,11 @@ export function ResumeEditor({ resume, isOpen, onClose, onSaveComplete }: Resume
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Date / Year (if available)</Label>
+                    <Label>Date / Year</Label>
                     <Input
-                      placeholder="e.g. 2023 / Spring 2022"
-                      value={ach.date || ""}
-                      onChange={(e) => handleAchievementChange(index, "date", e.target.value)}
+                      type="month"
+                      value={parseMonthYear(ach.date || "")}
+                      onChange={(e) => handleAchievementChange(index, "date", formatMonthYear(e.target.value))}
                     />
                   </div>
 
