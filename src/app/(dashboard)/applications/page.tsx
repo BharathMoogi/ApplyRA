@@ -37,6 +37,7 @@ import {
   DollarSign,
   Info,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 export default function ApplicationsPage() {
@@ -350,9 +351,23 @@ export default function ApplicationsPage() {
                       className="border border-muted/50 bg-card rounded-xl p-3.5 space-y-2.5 shadow-sm hover:shadow transition-all hover:border-muted cursor-pointer relative group"
                     >
                       <div>
-                        <h5 className="font-bold text-xs group-hover:text-primary transition-colors leading-tight">
-                          {app.jobTitle}
-                        </h5>
+                        <div className="flex items-start justify-between gap-1">
+                          <h5 className="font-bold text-xs group-hover:text-primary transition-colors leading-tight flex-1">
+                            {app.jobTitle}
+                          </h5>
+                          {app.jobUrl && (
+                            <a
+                              href={app.jobUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors shrink-0"
+                              title="View original job listing"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
                         <span className="text-[10px] font-medium text-muted-foreground block mt-0.5">
                           {app.companyName}
                         </span>
@@ -416,7 +431,20 @@ export default function ApplicationsPage() {
                 {filteredApps.map((app) => (
                   <tr key={app.id} className="hover:bg-muted/10 transition-colors">
                     <td className="p-3 font-semibold">
-                      <div>{app.jobTitle}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span>{app.jobTitle}</span>
+                        {app.jobUrl && (
+                          <a
+                            href={app.jobUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                            title="View original job listing"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
                       <span className="text-[10px] text-muted-foreground font-medium">{app.companyName}</span>
                     </td>
                     <td className="p-3 text-muted-foreground">{app.location || "N/A"}</td>
@@ -627,7 +655,19 @@ export default function ApplicationsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Listing URL</Label>
+                    <div className="flex justify-between items-center">
+                      <Label>Listing URL</Label>
+                      {editUrl && (
+                        <a
+                          href={editUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-primary hover:underline flex items-center gap-0.5 font-bold"
+                        >
+                          Visit Listing <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                     <Input
                       value={editUrl}
                       onChange={(e) => setEditUrl(e.target.value)}
