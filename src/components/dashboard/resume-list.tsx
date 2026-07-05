@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, MoreVertical, Trash2, Check, Star, Edit, Loader2 } from "lucide-react";
+import { FileText, MoreVertical, Trash2, Check, Star, Edit, Loader2, Download } from "lucide-react";
 import { setPrimaryResume, deleteResume } from "@/actions/resumes";
 import { formatDate } from "@/lib/utils";
 
@@ -26,6 +26,130 @@ interface ResumeListProps {
 
 export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const handleDownload = (resume: Resume) => {
+    if (resume.fileUrl) {
+      window.open(resume.fileUrl, "_blank");
+      return;
+    }
+
+    if (!resume.content) return;
+
+    try {
+      const data = JSON.parse(resume.content);
+      let text = "";
+      
+      // Name & Contact info
+      text += `${data.personal?.name || ""}\n`;
+      const contactInfo = [
+        data.personal?.email,
+        data.personal?.phone,
+        data.personal?.location,
+        data.personal?.linkedin,
+        data.personal?.github,
+        data.personal?.portfolio
+      ].filter(Boolean).join(" | ");
+      text += `${contactInfo}\n`;
+      text += "=".repeat(60) + "\n\n";
+
+      // Summary
+      if (data.summary) {
+        text += "PROFESSIONAL SUMMARY\n";
+        text += "-".repeat(20) + "\n";
+        text += `${data.summary}\n\n`;
+      }
+
+      // Experience
+      if (data.experience && data.experience.length > 0) {
+        text += "WORK EXPERIENCE\n";
+        text += "-".repeat(20) + "\n";
+        data.experience.forEach((exp: any) => {
+          text += `${exp.role} at ${exp.company} (${exp.duration || ""})\n`;
+          if (exp.location) text += `Location: ${exp.location}\n`;
+          if (exp.description) text += `${exp.description}\n`;
+          text += "\n";
+        });
+      }
+
+      // Skills
+      if (data.skills && data.skills.length > 0) {
+        text += "SKILLS\n";
+        text += "-".repeat(20) + "\n";
+        text += `${data.skills.join(", ")}\n\n`;
+      }
+
+      // Projects
+      if (data.projects && data.projects.length > 0) {
+        text += "PROJECTS\n";
+        text += "-".repeat(20) + "\n";
+        data.projects.forEach((proj: any) => {
+          text += `${proj.name} (${proj.duration || ""})\n`;
+          if (proj.technologies && proj.technologies.length > 0) {
+            text += `Technologies: ${proj.technologies.join(", ")}\n`;
+          }
+          if (proj.description) text += `${proj.description}\n`;
+          text += "\n";
+        });
+      }
+
+      // Education
+      if (data.education && data.education.length > 0) {
+        text += "EDUCATION\n";
+        text += "-".repeat(20) + "\n";
+        data.education.forEach((edu: any) => {
+          const dates = [edu.startDate, edu.endDate || edu.year].filter(Boolean).join(" - ");
+          text += `${edu.degree} - ${edu.school} (${dates})\n`;
+          if (edu.grade) text += `Grade: ${edu.grade}\n`;
+          text += "\n";
+        });
+      }
+
+      // Certifications
+      if (data.certifications && data.certifications.length > 0) {
+        text += "CERTIFICATIONS\n";
+        text += "-".repeat(20) + "\n";
+        data.certifications.forEach((cert: any) => {
+          const expDate = cert.expiryDate ? ` (Expires: ${cert.expiryDate})` : "";
+          text += `${cert.name} - Issued by ${cert.issuer} on ${cert.issueDate || ""}${expDate}\n`;
+        });
+        text += "\n";
+      }
+
+      // Achievements
+      if (data.achievements && data.achievements.length > 0) {
+        text += "ACHIEVEMENTS\n";
+        text += "-".repeat(20) + "\n";
+        data.achievements.forEach((ach: any) => {
+          text += `[${ach.category}] ${ach.title} (${ach.date || ""})\n`;
+          if (ach.description) text += `${ach.description}\n`;
+        });
+        text += "\n";
+      }
+
+      // Create download link
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${resume.title.replace(/[^a-z0-9]/i, "_")}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to parse resume JSON for download:", err);
+      // Fallback to downloading raw JSON
+      const blob = new Blob([resume.content], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${resume.title.replace(/[^a-z0-9]/i, "_")}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
 
   const handleSetPrimary = async (id: string) => {
     setPendingId(id);
@@ -138,6 +262,18 @@ export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
                 >
                   <Edit className="h-3 w-3" />
                   Edit details
+                </Button>
+
+                {/* Download Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-primary shrink-0 hover:bg-primary/10"
+                  disabled={isPending}
+                  onClick={() => handleDownload(resume)}
+                  aria-label="Download resume version"
+                >
+                  <Download className="h-3.5 w-3.5" />
                 </Button>
 
                 {/* Delete button */}
