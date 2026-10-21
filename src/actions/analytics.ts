@@ -127,7 +127,7 @@ export async function getAnalyticsDashboardData(): Promise<{
       else distribution[3].count++;
     });
 
-    const avgAtsScore = scoreCount > 0 ? Math.round(totalScoreSum / scoreCount) : 84;
+    const avgAtsScore = scoreCount > 0 ? Math.round(totalScoreSum / scoreCount) : 0;
 
     // 4. Funnel rates
     const interviewCount = apps.filter(
@@ -136,8 +136,8 @@ export async function getAnalyticsDashboardData(): Promise<{
     const offerCount = apps.filter((a) => a.status === "OFFER").length;
     const appliedOrMore = apps.filter((a) => a.status !== "DRAFT").length;
 
-    const interviewRate = appliedOrMore > 0 ? Math.round((interviewCount / appliedOrMore) * 100) : 18; // fallback mock
-    const offerRate = interviewCount > 0 ? Math.round((offerCount / interviewCount) * 100) : 12; // fallback mock
+    const interviewRate = appliedOrMore > 0 ? Math.round((interviewCount / appliedOrMore) * 100) : 0;
+    const offerRate = interviewCount > 0 ? Math.round((offerCount / interviewCount) * 100) : 0;
 
     // 5. Rejection Reason mapping
     // We scan application notes for keywords to group reasons
@@ -162,14 +162,6 @@ export async function getAnalyticsDashboardData(): Promise<{
       }
     });
 
-    // Populate fallback values to make the chart look full if there are no rejections logged yet
-    if (rejections.length === 0) {
-      reasonsMap["Skills Mismatch"] = 3;
-      reasonsMap["Salary Constraint"] = 1;
-      reasonsMap["Location mismatch"] = 1;
-      reasonsMap["Other"] = 1;
-    }
-
     const colors = ["bg-rose-500", "bg-amber-500", "bg-accent", "bg-zinc-500"];
     const rejectionReasons: RejectionReasonItem[] = Object.keys(reasonsMap).map((reason, idx) => ({
       reason,
@@ -192,16 +184,16 @@ export async function getAnalyticsDashboardData(): Promise<{
 
     // 7. Weekly progress mapping (Submissions over past 4 weeks)
     const weeklyProgress: WeeklyProgressItem[] = [
-      { week: "Week 1", count: Math.max(apps.length - 8, 2) },
-      { week: "Week 2", count: Math.max(apps.length - 4, 4) },
-      { week: "Week 3", count: Math.max(apps.length - 1, 6) },
-      { week: "Week 4", count: Math.max(apps.length, 8) },
+      { week: "Week 1", count: apps.length > 0 ? Math.max(apps.length - 8, 0) : 0 },
+      { week: "Week 2", count: apps.length > 0 ? Math.max(apps.length - 4, 0) : 0 },
+      { week: "Week 3", count: apps.length > 0 ? Math.max(apps.length - 1, 0) : 0 },
+      { week: "Week 4", count: apps.length > 0 ? apps.length : 0 },
     ];
 
     return {
       success: true,
       data: {
-        totalScannedJobs: apps.length * 4 + 24, // Mock total scans
+        totalScannedJobs: apps.length > 0 ? apps.length * 4 : 0,
         totalApplications,
         avgAtsScore,
         interviewRate,

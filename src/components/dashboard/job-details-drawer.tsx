@@ -169,6 +169,11 @@ export function JobDetailsDrawer({
             target="_blank"
             rel="noopener noreferrer"
             className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
+            onClick={() => {
+              if (!isApplied) {
+                handleTrackApplication();
+              }
+            }}
           >
             <Send className="h-4 w-4" />
             Apply via {job.source}

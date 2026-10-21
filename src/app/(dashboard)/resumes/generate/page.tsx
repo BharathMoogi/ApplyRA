@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 import { getResumes } from "@/actions/resumes";
 import { generateCustomizedResume, type TailoredResumeResult } from "@/actions/generator";
+import { validateResumeForExport, type ValidationReport } from "@/lib/pdf/validator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loading } from "@/components/shared/loading";
-import { Sparkles, FileText, Download, Wand2, CheckCircle2, ChevronRight, Mail, Phone, Globe, AlertCircle, Loader2 } from "lucide-react";
+import { Sparkles, FileText, Download, Wand2, CheckCircle2, ChevronRight, Mail, Phone, Globe, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 
 interface ResumeVersion {
   id: string;
@@ -375,53 +376,88 @@ export default function ResumeGeneratorPage() {
               </Button>
             </div>
 
-            {/* HTML Resume preview container (styled dynamic templates) */}
+            {/* PRE-EXPORT VALIDATION REPORT */}
+            {(() => {
+              const report = validateResumeForExport(generationResult.tailoredData);
+              if (report.errors.length === 0 && report.warnings.length === 0) {
+                return (
+                  <div className="no-print flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>Pre-export verification passed: Clean ATS structure, verified candidate details, and no placeholders.</span>
+                  </div>
+                );
+              }
+              return (
+                <div className="no-print space-y-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Pre-Export Integrity Verification:</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-1 text-[11px] leading-tight">
+                    {report.errors.map((err, i) => (
+                      <li key={`err-${i}`} className="text-rose-600 dark:text-rose-400 font-semibold">{err.message}</li>
+                    ))}
+                    {report.warnings.map((warn, i) => (
+                      <li key={`warn-${i}`}>{warn.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+
+            {/* HTML Resume preview container (styled dynamic templates matching ATS order) */}
             <div
               id="printable-resume"
               className={`border border-muted/50 rounded-xl bg-white text-black shadow-lg mx-auto text-left w-full transition-all duration-200 ${
                 selectedTemplate === 'classic' ? 'font-serif p-10 space-y-5 max-w-[800px] text-xs' : 
-                selectedTemplate === 'modern' ? 'font-sans p-10 space-y-6 max-w-[800px] text-xs' : 
-                'font-sans p-6 space-y-3.5 max-w-[760px] text-[11px] leading-tight' // compact
+                selectedTemplate === 'modern' ? 'font-sans p-10 space-y-5 max-w-[800px] text-xs' : 
+                'font-sans p-6 space-y-3 max-w-[760px] text-[11px] leading-tight' // compact
               }`}
             >
-              {/* Header Contact info */}
+              {/* 1. Header Contact info */}
               {selectedTemplate === 'classic' ? (
-                <div className="text-center space-y-1.5 border-b pb-3">
-                  <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                    {generationResult.tailoredData.personal.name}
+                <div className="text-center space-y-1 border-b pb-3">
+                  <h2 className="text-2xl font-bold tracking-tight text-gray-900 uppercase">
+                    {generationResult.tailoredData.personal?.name || "Candidate"}
                   </h2>
                   <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs text-gray-600">
-                    {generationResult.tailoredData.personal.email && (
+                    {generationResult.tailoredData.personal?.email && (
                       <span>{generationResult.tailoredData.personal.email}</span>
                     )}
-                    {generationResult.tailoredData.personal.phone && (
+                    {generationResult.tailoredData.personal?.phone && (
                       <span>&bull; {generationResult.tailoredData.personal.phone}</span>
                     )}
-                    {generationResult.tailoredData.personal.website && (
-                      <span>&bull; {generationResult.tailoredData.personal.website}</span>
-                    )}
-                    {generationResult.tailoredData.personal.location && (
+                    {generationResult.tailoredData.personal?.location && (
                       <span>&bull; {generationResult.tailoredData.personal.location}</span>
+                    )}
+                    {generationResult.tailoredData.personal?.linkedin && (
+                      <span>&bull; {generationResult.tailoredData.personal.linkedin}</span>
+                    )}
+                    {generationResult.tailoredData.personal?.github && (
+                      <span>&bull; {generationResult.tailoredData.personal.github}</span>
                     )}
                   </div>
                 </div>
               ) : selectedTemplate === 'modern' ? (
-                <div className="space-y-2 border-b pb-4">
+                <div className="space-y-1.5 border-b pb-3">
                   <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
-                    {generationResult.tailoredData.personal.name}
+                    {generationResult.tailoredData.personal?.name || "Candidate"}
                   </h2>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 font-medium">
-                    {generationResult.tailoredData.personal.email && (
+                    {generationResult.tailoredData.personal?.email && (
                       <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.email}</span>
                     )}
-                    {generationResult.tailoredData.personal.phone && (
+                    {generationResult.tailoredData.personal?.phone && (
                       <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.phone}</span>
                     )}
-                    {generationResult.tailoredData.personal.website && (
-                      <span className="flex items-center gap-1"><Globe className="h-3.5 w-3.5" />{generationResult.tailoredData.personal.website}</span>
+                    {generationResult.tailoredData.personal?.location && (
+                      <span>&bull; {generationResult.tailoredData.personal.location}</span>
                     )}
-                    {generationResult.tailoredData.personal.location && (
-                      <span>• {generationResult.tailoredData.personal.location}</span>
+                    {generationResult.tailoredData.personal?.linkedin && (
+                      <span>&bull; {generationResult.tailoredData.personal.linkedin}</span>
+                    )}
+                    {generationResult.tailoredData.personal?.github && (
+                      <span>&bull; {generationResult.tailoredData.personal.github}</span>
                     )}
                   </div>
                 </div>
@@ -430,67 +466,117 @@ export default function ResumeGeneratorPage() {
                 <div className="flex items-center justify-between border-b pb-2">
                   <div>
                     <h2 className="text-lg font-bold tracking-tight text-gray-900 uppercase">
-                      {generationResult.tailoredData.personal.name}
+                      {generationResult.tailoredData.personal?.name || "Candidate"}
                     </h2>
                   </div>
-                  <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-600 justify-end">
-                    {generationResult.tailoredData.personal.email && (
+                  <div className="flex flex-wrap gap-x-2.5 text-[10px] text-gray-600 justify-end">
+                    {generationResult.tailoredData.personal?.email && (
                       <span>{generationResult.tailoredData.personal.email}</span>
                     )}
-                    {generationResult.tailoredData.personal.phone && (
+                    {generationResult.tailoredData.personal?.phone && (
                       <span>| {generationResult.tailoredData.personal.phone}</span>
                     )}
-                    {generationResult.tailoredData.personal.location && (
+                    {generationResult.tailoredData.personal?.location && (
                       <span>| {generationResult.tailoredData.personal.location}</span>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Summary / Objective */}
+              {/* 2. Professional Summary */}
               {generationResult.tailoredData.summary && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-1' : 'space-y-2'}>
+                <div className={selectedTemplate === 'compact' ? 'space-y-1' : 'space-y-1.5'}>
                   <h3 className={
                     selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
                     selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
                     "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
                   }>
-                    Summary
+                    Professional Summary
                   </h3>
-                  <p className={`${selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'} text-gray-700 leading-relaxed`}>
+                  <p className={`${selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'} text-gray-700 leading-relaxed text-justify`}>
                     {generationResult.tailoredData.summary}
                   </p>
                 </div>
               )}
 
-              {/* Work Experience */}
-              {generationResult.tailoredData.experience && generationResult.tailoredData.experience.length > 0 && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+              {/* 3. Technical Skills (Categorized by type) */}
+              {generationResult.tailoredData.skills && generationResult.tailoredData.skills.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-1' : 'space-y-1.5'}>
                   <h3 className={
                     selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
                     selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
                     "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
                   }>
-                    Professional Experience
+                    Technical Skills
                   </h3>
-                  {generationResult.tailoredData.experience.map((exp, index) => (
-                    <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}>
-                      <div className="flex items-center justify-between font-bold text-gray-900">
-                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{exp.role} &bull; {exp.company}</span>
-                        <span className="text-gray-500 font-medium text-[10px]">{exp.duration}</span>
-                      </div>
-                      {exp.location && <p className="text-[10px] text-gray-500 font-semibold">{exp.location}</p>}
-                      <p className="text-gray-600 leading-relaxed whitespace-pre-line text-xs">
-                        {exp.description}
-                      </p>
+                  {generationResult.tailoredData.categorizedSkills ? (
+                    <div className="space-y-1 text-xs text-gray-700">
+                      {generationResult.tailoredData.categorizedSkills.languages?.length > 0 && (
+                        <div><strong>Languages:</strong> {generationResult.tailoredData.categorizedSkills.languages.join(", ")}</div>
+                      )}
+                      {generationResult.tailoredData.categorizedSkills.frameworks?.length > 0 && (
+                        <div><strong>Frameworks & Libraries:</strong> {generationResult.tailoredData.categorizedSkills.frameworks.join(", ")}</div>
+                      )}
+                      {generationResult.tailoredData.categorizedSkills.databases?.length > 0 && (
+                        <div><strong>Databases:</strong> {generationResult.tailoredData.categorizedSkills.databases.join(", ")}</div>
+                      )}
+                      {[...(generationResult.tailoredData.categorizedSkills.tools || []), ...(generationResult.tailoredData.categorizedSkills.cloud || [])].length > 0 && (
+                        <div><strong>Tools & Cloud:</strong> {[...new Set([...(generationResult.tailoredData.categorizedSkills.tools || []), ...(generationResult.tailoredData.categorizedSkills.cloud || [])])].join(", ")}</div>
+                      )}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {generationResult.tailoredData.skills.map((skill) => (
+                        <span key={skill} className="px-2 py-0.5 bg-gray-100 text-gray-800 font-semibold rounded text-[10px]">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Projects */}
+              {/* 4. Work Experience / Internships */}
+              {generationResult.tailoredData.experience && generationResult.tailoredData.experience.length > 0 && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-3'}>
+                  <h3 className={
+                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
+                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
+                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
+                  }>
+                    Work Experience & Internships
+                  </h3>
+                  {generationResult.tailoredData.experience.map((exp, index) => {
+                    const bullets = (exp.description || "")
+                      .split("\n")
+                      .map((b) => b.replace(/^[-*•·–—\d.]+\s*/, '').trim())
+                      .filter(Boolean);
+
+                    return (
+                      <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1'}>
+                        <div className="flex items-center justify-between font-bold text-gray-900">
+                          <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>
+                            {exp.role} &bull; {exp.company}{exp.employmentType ? ` (${exp.employmentType})` : ""}
+                          </span>
+                          <span className="text-gray-500 font-medium text-[10px]">{exp.duration}</span>
+                        </div>
+                        {exp.location && <p className="text-[10px] text-gray-500 font-semibold">{exp.location}</p>}
+                        {bullets.length > 0 ? (
+                          <ul className="list-disc pl-4 space-y-0.5 text-gray-600 text-xs">
+                            {bullets.map((b, bIdx) => (
+                              <li key={bIdx}>{b}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 5. Projects */}
               {generationResult.tailoredData.projects && generationResult.tailoredData.projects.length > 0 && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-3'}>
                   <h3 className={
                     selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
                     selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
@@ -498,30 +584,41 @@ export default function ResumeGeneratorPage() {
                   }>
                     Projects
                   </h3>
-                  {generationResult.tailoredData.projects.map((proj, index) => (
-                    <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1.5'}>
-                      <div className="flex items-center justify-between font-bold text-gray-900">
-                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{proj.name}</span>
-                        {proj.duration && <span className="text-gray-500 font-medium text-[10px]">{proj.duration}</span>}
+                  {generationResult.tailoredData.projects.map((proj, index) => {
+                    const bullets = (proj.description || "")
+                      .split("\n")
+                      .map((b) => b.replace(/^[-*•·–—\d.]+\s*/, '').trim())
+                      .filter(Boolean);
+
+                    return (
+                      <div key={index} className={selectedTemplate === 'compact' ? 'space-y-0.5' : 'space-y-1'}>
+                        <div className="flex items-center justify-between font-bold text-gray-900">
+                          <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{proj.name}</span>
+                          {proj.duration && <span className="text-gray-500 font-medium text-[10px]">{proj.duration}</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[10px] text-gray-500 font-semibold">
+                          {proj.technologies && proj.technologies.length > 0 && (
+                            <span className="text-gray-700">Tech: {proj.technologies.join(', ')}</span>
+                          )}
+                          {proj.githubUrl && <span>&bull; GitHub: {proj.githubUrl}</span>}
+                          {proj.liveUrl && <span>&bull; Live Demo: {proj.liveUrl}</span>}
+                        </div>
+                        {bullets.length > 0 ? (
+                          <ul className="list-disc pl-4 space-y-0.5 text-gray-600 text-xs">
+                            {bullets.map((b, bIdx) => (
+                              <li key={bIdx}>{b}</li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
-                      <div className="flex flex-wrap gap-2 text-[10px] text-gray-500 font-semibold">
-                        {proj.githubUrl && <span>GitHub: {proj.githubUrl}</span>}
-                        {proj.liveUrl && <span>Live: {proj.liveUrl}</span>}
-                      </div>
-                      {proj.technologies && proj.technologies.length > 0 && (
-                        <p className="text-[10px] font-bold text-gray-700">Tech Stack: {proj.technologies.join(', ')}</p>
-                      )}
-                      <p className="text-gray-600 leading-relaxed text-xs">
-                        {proj.description}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
-              {/* Education */}
+              {/* 6. Education */}
               {generationResult.tailoredData.education && generationResult.tailoredData.education.length > 0 && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-3'}>
                   <h3 className={
                     selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
                     selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
@@ -532,84 +629,47 @@ export default function ResumeGeneratorPage() {
                   {generationResult.tailoredData.education.map((edu, index) => (
                     <div key={index} className="space-y-0.5 text-xs">
                       <div className="flex items-center justify-between font-bold text-gray-900">
-                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{edu.degree} {edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ""}</span>
+                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>
+                          {edu.school || "University"}
+                        </span>
                         <span className="text-gray-500 font-medium text-[10px]">{edu.year}</span>
                       </div>
-                      <p className="text-gray-600">{edu.school} {edu.grade ? `(Grade: ${edu.grade})` : ""}</p>
+                      <p className="text-gray-600">
+                        {edu.degree} {edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ""} {edu.grade ? `(Grade: ${edu.grade})` : ""}
+                      </p>
                       {edu.coursework && edu.coursework.length > 0 && (
-                        <p className="text-[10px] text-gray-500 mt-0.5"><span className="font-semibold text-gray-700">Coursework:</span> {edu.coursework.join(', ')}</p>
+                        <p className="text-[10px] text-gray-500"><span className="font-semibold text-gray-700">Coursework:</span> {edu.coursework.join(', ')}</p>
                       )}
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Certifications */}
-              {generationResult.tailoredData.certifications && generationResult.tailoredData.certifications.length > 0 && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
+              {/* 7. Certifications & Achievements */}
+              {((generationResult.tailoredData.certifications && generationResult.tailoredData.certifications.length > 0) ||
+                (generationResult.tailoredData.achievements && generationResult.tailoredData.achievements.length > 0)) && (
+                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-3'}>
                   <h3 className={
                     selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
                     selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
                     "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
                   }>
-                    Certifications
+                    Certifications & Achievements
                   </h3>
-                  {generationResult.tailoredData.certifications.map((cert, index) => (
-                    <div key={index} className="space-y-0.5 text-xs">
-                      <div className="flex items-center justify-between font-bold text-gray-900">
-                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{cert.name}</span>
-                        {cert.issueDate && <span className="text-gray-500 font-medium text-[10px]">{cert.issueDate}</span>}
-                      </div>
-                      <p className="text-gray-600">Issuer: {cert.issuer} {cert.credentialUrl ? `(${cert.credentialUrl})` : ""}</p>
-                    </div>
-                  ))}
+                  <ul className="list-disc pl-4 space-y-1 text-xs text-gray-600">
+                    {generationResult.tailoredData.certifications?.map((cert, index) => (
+                      <li key={`cert-${index}`}>
+                        <strong>{cert.name}</strong> - {cert.issuer} {cert.issueDate ? `(${cert.issueDate})` : ""}
+                      </li>
+                    ))}
+                    {generationResult.tailoredData.achievements?.map((ach, index) => (
+                      <li key={`ach-${index}`}>
+                        <strong>{ach.title}</strong> [{ach.category}]: {ach.description} {ach.date ? `(${ach.date})` : ""}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
-
-              {/* Achievements */}
-              {generationResult.tailoredData.achievements && generationResult.tailoredData.achievements.length > 0 && (
-                <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
-                  <h3 className={
-                    selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
-                    selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
-                    "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
-                  }>
-                    Achievements
-                  </h3>
-                  {generationResult.tailoredData.achievements.map((ach, index) => (
-                    <div key={index} className="space-y-0.5 text-xs">
-                      <div className="flex items-center justify-between font-bold text-gray-900">
-                        <span className={selectedTemplate === 'compact' ? 'text-[10px]' : 'text-xs'}>{ach.title} ({ach.category})</span>
-                        {ach.date && <span className="text-gray-500 font-medium text-[10px]">{ach.date}</span>}
-                      </div>
-                      <p className="text-gray-600 leading-relaxed">
-                        {ach.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Skills Grid */}
-              <div className={selectedTemplate === 'compact' ? 'space-y-2' : 'space-y-4'}>
-                <h3 className={
-                  selectedTemplate === 'classic' ? "text-xs uppercase font-extrabold tracking-wider text-gray-900 border-b pb-0.5 font-serif" :
-                  selectedTemplate === 'modern' ? "text-xs font-bold tracking-tight text-emerald-600 border-l-2 border-emerald-500 pl-2 font-sans" :
-                  "text-[10px] uppercase font-bold tracking-wider text-gray-900 bg-gray-50 px-2 py-0.5 font-sans"
-                }>
-                  Technical Skills
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {generationResult.tailoredData.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="px-2 py-0.5 bg-gray-100 text-gray-800 font-semibold rounded text-[10px]"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         </div>

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { searchJobs } from "@/actions/jobs";
 import {
-  runAgentStep,
+  prepareAgentStep,
+  confirmAgentStep,
   runAutomationEngine,
   getAutomationDaemonStatus,
   toggleAutomationDaemon,
@@ -33,6 +34,8 @@ import {
 
 type AgentViewMode = "manual" | "daemon";
 
+export const maxDuration = 60; // Allow 60s timeout for all operations on this page
+
 export default function AIAgentPage() {
   const [viewMode, setViewMode] = useState<AgentViewMode>("manual");
   
@@ -55,7 +58,13 @@ export default function AIAgentPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [currentJobIndex, setCurrentJobIndex] = useState(-1);
-  const [scannedJobs, setScannedJobs] = useState<{ id: string; title: string; company: string; atsScore: number; passed: boolean }[]>([]);
+  const [scannedJobs, setScannedJobs] = useState<{ id: string; title: string; company: string; atsScore: number; passed: "applied" | "skipped" | "pending" }[]>([]);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    job: any;
+    atsScore: number;
+    applicationId: string;
+    resolve: (confirm: boolean) => void;
+  } | null>(null);
 
   // Summary Metrics
   const [metrics, setMetrics] = useState({
@@ -144,30 +153,27 @@ export default function AIAgentPage() {
 
         addLog(`\n--- Optimizing Job ${i + 1} of ${jobsToProcess.length} ---`);
         
-        const stepResult = await runAgentStep(job, threshold);
+        const stepResult = await prepareAgentStep(job, threshold);
         
-        if (!stepResult.success) {
-          addLog(`[${timeStr()}] [Error] Failed to process job ${job.company}: ${stepResult.error}`);
+        if (!stepResult.success || !stepResult.result) {
+          addLog(`[${timeStr()}] [Error] Failed to prepare job ${job.company}: ${stepResult.error || "Unknown error"}`);
           await new Promise((r) => setTimeout(r, 400));
           continue;
         }
 
-        if (stepResult.success && stepResult.result) {
-          const resObj = stepResult.result;
-          
-          for (const line of resObj.logs) {
-            addLog(line);
-            await new Promise((r) => setTimeout(r, 400));
-          }
+        const resObj = stepResult.result;
 
-          setMetrics((prev) => {
-            const isApplied = resObj.passed;
-            return {
-              scanned: prev.scanned + 1,
-              applied: prev.applied + (isApplied ? 1 : 0),
-              skipped: prev.skipped + (isApplied ? 0 : 1),
-            };
-          });
+        for (const line of resObj.logs) {
+          addLog(line);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        if (!resObj.passed) {
+          setMetrics((prev) => ({
+            ...prev,
+            scanned: prev.scanned + 1,
+            skipped: prev.skipped + 1,
+          }));
 
           setScannedJobs((prev) => [
             ...prev,
@@ -176,10 +182,57 @@ export default function AIAgentPage() {
               title: job.title,
               company: job.company,
               atsScore: resObj.atsScore,
-              passed: resObj.passed,
+              passed: "skipped",
             },
           ]);
+          continue;
         }
+
+        // Add to scanned list as pending
+        setScannedJobs((prev) => [
+          ...prev,
+          {
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            atsScore: resObj.atsScore,
+            passed: "pending",
+          },
+        ]);
+
+        // Pause loop and await user confirmation
+        const confirmed = await new Promise<boolean>((resolve) => {
+          setPendingConfirmation({
+            job,
+            atsScore: resObj.atsScore,
+            applicationId: resObj.applicationId,
+            resolve
+          });
+        });
+
+        // Run confirmation step
+        const confirmResult = await confirmAgentStep(resObj.applicationId, confirmed);
+        
+        // Print confirmation logs
+        for (const line of confirmResult.logs) {
+          addLog(line);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        // Update scanned job state in list
+        setScannedJobs((prev) =>
+          prev.map((item) =>
+            item.id === job.id
+              ? { ...item, passed: confirmed ? "applied" : "skipped" }
+              : item
+          )
+        );
+
+        setMetrics((prev) => ({
+          scanned: prev.scanned + 1,
+          applied: prev.applied + (confirmed ? 1 : 0),
+          skipped: prev.skipped + (confirmed ? 0 : 1),
+        }));
       }
 
       addLog(`\n[${timeStr()}] [System] Manual session finished.`);
@@ -188,6 +241,7 @@ export default function AIAgentPage() {
       addLog(`[Fatal] Crash details: ${err.message}`);
     } finally {
       setIsRunning(false);
+      setPendingConfirmation(null);
     }
   };
 
@@ -203,17 +257,25 @@ export default function AIAgentPage() {
       if (res.success) {
         for (const line of res.logs) {
           addLog(line);
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 100));
         }
 
         setMetrics({
           scanned: res.appliedCount,
-          applied: res.appliedCount,
+          applied: 0,
           skipped: 0,
         });
 
-        // Populate pipeline
-        setScannedJobs(res.appliedJobs || []);
+        // Populate pipeline as pending (drafts)
+        setScannedJobs(
+          (res.appliedJobs || []).map((j) => ({
+            id: j.id,
+            title: j.title,
+            company: j.company,
+            atsScore: j.atsScore,
+            passed: "pending",
+          }))
+        );
       } else {
         addLog(`[${timeStr()}] [Error] ${res.logs[0] || "Automation failed."}`);
       }
@@ -455,10 +517,15 @@ export default function AIAgentPage() {
 
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-muted-foreground">{job.atsScore}% ATS</span>
-                      {job.passed ? (
+                      {job.passed === "applied" ? (
                         <span className="text-emerald-500 flex items-center gap-1 font-semibold text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Applied
+                        </span>
+                      ) : job.passed === "pending" ? (
+                        <span className="text-amber-500 flex items-center gap-1 font-semibold text-[10px] bg-amber-500/10 px-2 py-0.5 rounded animate-pulse">
+                          <Clock className="h-3.5 w-3.5 animate-spin" />
+                          Pending
                         </span>
                       ) : (
                         <span className="text-rose-500 flex items-center gap-1 font-semibold text-[10px] bg-rose-500/10 px-2 py-0.5 rounded">
@@ -529,6 +596,47 @@ export default function AIAgentPage() {
               )}
               <div ref={terminalEndRef} />
             </div>
+
+            {/* Interactive Confirmation Prompt */}
+            {pendingConfirmation && (
+              <div className="mt-4 border border-zinc-800 bg-zinc-900 p-4 rounded-xl space-y-3 font-sans shrink-0 animate-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-cyan-400 animate-pulse" />
+                    AI-Assisted Apply Confirmation Required
+                  </span>
+                  <span className="text-zinc-500 font-mono text-[10px] bg-zinc-950 px-2 py-0.5 rounded">ATS Match: {pendingConfirmation.atsScore}%</span>
+                </div>
+                <p className="text-xs text-zinc-300">
+                  The AI has prepared tailored materials for <strong className="text-foreground">{pendingConfirmation.job.title}</strong> at <strong className="text-foreground">{pendingConfirmation.job.company}</strong>.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="text-[10px] font-extrabold h-8 bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                    onClick={() => {
+                      pendingConfirmation.resolve(true);
+                      setPendingConfirmation(null);
+                    }}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirm & Submit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] font-extrabold h-8 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 gap-1"
+                    onClick={() => {
+                      pendingConfirmation.resolve(false);
+                      setPendingConfirmation(null);
+                    }}
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    Skip Job
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

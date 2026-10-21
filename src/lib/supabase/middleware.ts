@@ -6,15 +6,27 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const isValidUrl = url && (url.startsWith("http://") || url.startsWith("https://"));
-  const supabaseUrl = isValidUrl ? url : "https://placeholder.supabase.co";
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+  // Skip middleware overhead entirely for Server Actions, API routes, and non-GET requests
+  if (
+    request.method !== "GET" ||
+    request.headers.get("next-action") ||
+    request.nextUrl.pathname.startsWith("/api")
+  ) {
+    return supabaseResponse;
+  }
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const isPlaceholder = !url || !url.startsWith("http") || url.includes("placeholder");
+
+  // If Supabase is unconfigured or in placeholder mode, pass through immediately
+  if (isPlaceholder) {
+    return supabaseResponse;
+  }
+
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+  try {
+    const supabase = createServerClient(url, supabaseKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -31,30 +43,31 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
+    });
+
+    // Run session check with an aggressive 1.2s timeout so Edge Middleware NEVER causes a 504
+    const userPromise = supabase.auth.getUser();
+    const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
+      setTimeout(() => resolve({ data: { user: null } }), 1200)
+    );
+
+    const {
+      data: { user },
+    } = await Promise.race([userPromise, timeoutPromise]);
+
+    const protectedRoutes = ["/dashboard", "/applications", "/profile", "/settings"];
+    const isProtected = protectedRoutes.some((route) =>
+      request.nextUrl.pathname.startsWith(route)
+    );
+
+    if (!user && isProtected) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      return NextResponse.redirect(loginUrl);
     }
-  );
-
-  // IMPORTANT: Do not add logic between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very
-  // hard to debug issues with users being randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Redirect unauthenticated users trying to access protected routes
-  if (
-    !user &&
-    request.nextUrl.pathname.startsWith("/dashboard") ||
-    !user &&
-    request.nextUrl.pathname.startsWith("/applications") ||
-    !user &&
-    request.nextUrl.pathname.startsWith("/profile") ||
-    !user &&
-    request.nextUrl.pathname.startsWith("/settings")
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  } catch (err) {
+    // If Supabase network call fails in Edge middleware, pass through so server layout can handle it
+    console.warn("[Middleware] Supabase auth check skipped:", err);
   }
 
   return supabaseResponse;

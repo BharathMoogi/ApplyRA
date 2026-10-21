@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
 const statusStyles: Record<string, string> = {
+  Draft: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-transparent",
   Applied: "bg-primary/10 text-primary border-transparent",
   "Under Review": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-transparent",
   OA: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-transparent",

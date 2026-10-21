@@ -391,6 +391,7 @@ export async function toggleBookmarkJob(job: {
 
     revalidatePath("/jobs");
     revalidatePath("/dashboard");
+    revalidatePath("/applications");
     return { success: true, bookmarked: true };
   } catch (error: any) {
     console.error("Error in toggleBookmarkJob:", error);
@@ -461,6 +462,7 @@ export async function applyToBookmarkedJob(job: {
 
     revalidatePath("/jobs");
     revalidatePath("/dashboard");
+    revalidatePath("/applications");
     return { success: true };
   } catch (error: any) {
     console.error("Error in applyToBookmarkedJob:", error);

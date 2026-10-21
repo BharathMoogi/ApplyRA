@@ -5,7 +5,18 @@
 
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY is not configured.");
+    }
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+}
 
 export async function sendApplicationEmail({
   toEmail,
@@ -35,7 +46,8 @@ export async function sendApplicationEmail({
   // Use verified Resend account email if RESEND_TO_EMAIL is set, otherwise use user email
   const recipientEmail = process.env.RESEND_TO_EMAIL || toEmail;
 
-  const result = await resend.emails.send({
+  const client = getResendClient();
+  const result = await client.emails.send({
     from: "Applyra Agent <onboarding@resend.dev>",
     to: recipientEmail,
     subject: `✅ Applied: ${jobTitle} at ${company} — for ${toEmail}`,

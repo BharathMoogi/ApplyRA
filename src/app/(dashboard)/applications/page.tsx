@@ -8,6 +8,7 @@ import {
   updateApplicationDetails,
   deleteApplication,
   getApplicationsAnalytics,
+  submitDraftApplication,
   type JobApplicationUI,
   type UIStatus,
   type TrackerAnalytics,
@@ -74,6 +75,7 @@ export default function ApplicationsPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState<UIStatus>("Applied");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
 
   const fetchTrackerData = useCallback(async () => {
     setIsLoading(true);
@@ -95,6 +97,7 @@ export default function ApplicationsPage() {
 
   // Status lists
   const statuses: UIStatus[] = [
+    "Draft",
     "Applied",
     "Under Review",
     "OA",
@@ -147,6 +150,26 @@ export default function ApplicationsPage() {
       console.error(err);
     } finally {
       setIsSavingAdd(false);
+    }
+  };
+
+  const handleConfirmDraftSubmit = async () => {
+    if (!selectedApp) return;
+    setIsSubmittingDraft(true);
+    try {
+      const res = await submitDraftApplication(selectedApp.id);
+      if (res.success) {
+        alert("Application submitted successfully!");
+        setIsDetailsOpen(false);
+        setSelectedApp(null);
+        fetchTrackerData();
+      } else {
+        alert(res.error || "Failed to submit application.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingDraft(false);
     }
   };
 
@@ -697,6 +720,34 @@ export default function ApplicationsPage() {
                       className="w-full text-xs p-3 rounded-lg border bg-background resize-none focus:outline-none focus:border-ring border-muted/50"
                     />
                   </div>
+
+                  {editStatus === "Draft" && (
+                    <div className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 rounded-xl p-4 space-y-3 mt-4">
+                      <div className="flex items-center gap-1.5 font-bold text-xs">
+                        <Sparkles className="h-4 w-4 text-cyan-500" />
+                        AI-Assisted Apply: Awaiting Submission
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        This application was prepared by the AI Agent (resume optimized, cover letter generated, fields pre-filled). Click below to complete the submission.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleConfirmDraftSubmit}
+                        disabled={isSubmittingDraft}
+                        className="w-full text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white h-8"
+                      >
+                        {isSubmittingDraft ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Confirm & Submit Application"
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* TIMELINE HISTORIES */}

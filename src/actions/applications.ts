@@ -3,8 +3,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { sendApplicationEmail } from "@/lib/email";
+import { AutoApplyAgent } from "@/lib/ai/agents/auto-apply-agent";
 
 export type UIStatus =
+  | "Draft"
   | "Applied"
   | "Under Review"
   | "OA"
@@ -34,7 +37,9 @@ function mapDbToUI(app: any): JobApplicationUI {
   const notes = app.notes || "";
   let uiStatus: UIStatus = "Applied";
 
-  if (app.status === "APPLIED") {
+  if (app.status === "DRAFT") {
+    uiStatus = "Draft";
+  } else if (app.status === "APPLIED") {
     uiStatus = "Applied";
   } else if (app.status === "SCREENING") {
     if (notes.includes("[OA]")) {
@@ -81,6 +86,9 @@ function mapDbToUI(app: any): JobApplicationUI {
 
 function mapUIToDb(uiStatus: UIStatus, rawNotes: string | null): { status: any; notes: string } {
   const clean = rawNotes || "";
+  if (uiStatus === "Draft") {
+    return { status: "DRAFT", notes: clean };
+  }
   if (uiStatus === "Applied") {
     return { status: "APPLIED", notes: clean };
   }
@@ -335,5 +343,91 @@ export async function getApplicationsAnalytics(): Promise<TrackerAnalytics> {
       interviewRate: 0,
       offerRate: 0,
     };
+  }
+}
+
+/**
+ * Submits a saved Draft application.
+ * Simulates final submission steps, updates the status to APPLIED,
+ * and sends confirmation email.
+ */
+export async function submitDraftApplication(id: string) {
+  try {
+    const profile = await getProfile();
+
+    const existing = await prisma.jobApplication.findFirst({
+      where: { id, profileId: profile.id },
+    });
+
+    if (!existing) {
+      throw new Error("Application not found.");
+    }
+
+    if (existing.status !== "DRAFT") {
+      throw new Error("Application is not in Draft status.");
+    }
+
+    // Parse metadata from notes if present
+    let metadata: any = {};
+    if (existing.notes?.includes("Metadata:")) {
+      const match = existing.notes.match(/Metadata:\s*(\{.*\})/);
+      if (match) {
+        try {
+          metadata = JSON.parse(match[1]);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    const atsScore = metadata.atsScore || 75;
+    const resumeId = metadata.resumeId || "";
+    const portal = metadata.portal || AutoApplyAgent.getPortal(existing.jobUrl || "");
+
+    // Simulate final submission logs
+    const submitLogs = AutoApplyAgent.simulateSubmit(existing.jobUrl || "");
+    const cleanLogsText = "\n" + submitLogs.join("\n");
+
+    const notesMessage = `Auto-submitted by AI Agent via ${portal} (ATS Match: ${atsScore}%). Linked Resume ID: ${resumeId}${cleanLogsText}`;
+
+    const updated = await prisma.jobApplication.update({
+      where: { id },
+      data: {
+        status: "APPLIED",
+        appliedAt: new Date(),
+        notes: notesMessage,
+      },
+    });
+
+    // Send confirmation email
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        await sendApplicationEmail({
+          toEmail: user.email!,
+          userName: profile.fullName || user.email || "User",
+          jobTitle: existing.jobTitle,
+          company: existing.companyName,
+          location: existing.location || "Remote",
+          salary: existing.salary || "N/A",
+          atsScore,
+          jobUrl: existing.jobUrl || "",
+        });
+      }
+    } catch (emailErr) {
+      console.error("Failed to send email in submitDraftApplication:", emailErr);
+    }
+
+    revalidatePath("/applications");
+    revalidatePath("/dashboard");
+
+    return { success: true, application: mapDbToUI(updated), logs: submitLogs };
+  } catch (err: any) {
+    console.error("Error in submitDraftApplication:", err);
+    return { success: false, error: err.message };
   }
 }

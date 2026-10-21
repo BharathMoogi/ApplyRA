@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { syncUserProfile } from "@/lib/profile";
 
+export const maxDuration = 60;
+export const preferredRegion = "syd1";
+
 export default async function DashboardLayout({
   children,
 }: {

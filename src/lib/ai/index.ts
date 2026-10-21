@@ -12,7 +12,8 @@ class AIServiceManager {
     this.providers.set('gemini', new GeminiProvider());
     this.providers.set('groq', new GroqProvider());
 
-    this.activeProviderName = process.env.AI_PROVIDER || 'groq';
+    const envVal = (process.env.AI_PROVIDER || "").trim();
+    this.activeProviderName = envVal && envVal.length > 0 ? envVal : 'gemini';
   }
 
   getProvider(name?: string): AIProvider {

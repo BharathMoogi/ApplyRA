@@ -286,6 +286,9 @@ function extractContactInfo(contactLines: string[], authName: string, fullText: 
 // EXPERIENCE EXTRACTOR
 // ────────────────────────────────────────────────────────────────────────────
 
+const roleKeywordPattern = /\b(Intern(?:ship)?|Engineer|Developer|Analyst|Consultant|Designer|Manager|Specialist|Coordinator|Architect|Scientist|Administrator|Officer|Associate|Lead|Director|VP|President|Founder|Co-Founder|Staff|Principal|Assistant|Representative|Executive|Technician|Fellow|Contributor|Programmer)\b/i;
+const companyKeywordPattern = /\b(Inc\.?|Corp\.?|LLC|Ltd\.?|Labs?|Technologies|Technology|Solutions|Systems|Group|Studio|Company|Services|Ventures)\b/i;
+
 function extractExperience(expLines: string[]) {
   if (expLines.length === 0) return [];
 
@@ -294,7 +297,7 @@ function extractExperience(expLines: string[]) {
 
   const eduKeywords = /\b(B\.?S\.?|B\.?E\.?|B\.?Tech|M\.?S\.?|M\.?Tech|MBA|Ph\.?D|Bachelor|Master|Associate|Diploma|Certificate|B\.?A\.?|M\.?A\.?|B\.?Sc|M\.?Sc|University|College|Institute|GITAM|School)\b/i;
   
-  const sectionHeadingsToIgnore = /summary|experience|education|skills|projects|certifications|achievements|internships|employment|work|history/i;
+  const sectionHeadingsToIgnore = /^(?:summary|experience|education|skills|projects|certifications|achievements|internships|employment|work|history)$/i;
 
   const empTypes = /\b(Full-time|Part-time|Contract|Internship|Intern|Freelance|Apprentice|Remote|On-site|Hybrid)\b/i;
 
@@ -302,13 +305,13 @@ function extractExperience(expLines: string[]) {
   let descLines: string[] = [];
 
   const flush = () => {
-    if (current) {
-      // Prevent adding education or headings as work experience
-      const isEdu = eduKeywords.test(current.company) || eduKeywords.test(current.role);
-      const isHeading = sectionHeadingsToIgnore.test(current.company) && current.company.split(' ').length <= 2;
+    if (current && (current.company || current.role)) {
+      // Prevent adding pure education or headings as work experience
+      const isEdu = eduKeywords.test(current.company) && eduKeywords.test(current.role);
+      const isHeading = sectionHeadingsToIgnore.test(current.company.trim());
       
       if (!isEdu && !isHeading) {
-        current.description = descLines.join(' ').trim();
+        current.description = descLines.join('\n').trim();
         experiences.push(current);
       }
       descLines = [];
@@ -318,12 +321,12 @@ function extractExperience(expLines: string[]) {
 
   for (const line of expLines) {
     const normalised = line.trim().toLowerCase().replace(/[^a-z\s]/g, '');
-    if (sectionHeadingsToIgnore.test(normalised) && line.split(' ').length <= 2) {
+    if (sectionHeadingsToIgnore.test(normalised)) {
       flush();
       continue;
     }
 
-    if (eduKeywords.test(line) && !line.includes("Intern") && !line.includes("Developer") && !line.includes("Engineer")) {
+    if (eduKeywords.test(line) && !line.includes("Intern") && !line.includes("Developer") && !line.includes("Engineer") && !line.includes("Analyst") && !line.includes("Lead")) {
       flush();
       continue;
     }
@@ -346,32 +349,65 @@ function extractExperience(expLines: string[]) {
       const empMatch = cleanedLine.match(empTypes);
       if (empMatch) {
         employmentType = empMatch[0].trim();
+      } else if (/intern\b/i.test(line)) {
+        employmentType = 'Internship';
       }
       const finalLine = employmentType ? cleanedLine.replace(empTypes, '').trim() : cleanedLine;
 
       const parts = finalLine.split(/[|,·•\-–—]/).map(p => p.trim()).filter(Boolean);
+      let company = parts[0] || '';
+      let role = parts[1] || parts[0] || '';
+
+      if (parts.length >= 2) {
+        const isPart0Role = roleKeywordPattern.test(parts[0]);
+        const isPart1Role = roleKeywordPattern.test(parts[1]);
+        const isPart0Company = companyKeywordPattern.test(parts[0]);
+        const isPart1Company = companyKeywordPattern.test(parts[1]);
+
+        if ((isPart0Role && !isPart1Role) || isPart1Company) {
+          role = parts[0];
+          company = parts[1];
+        } else if ((isPart1Role && !isPart0Role) || isPart0Company) {
+          company = parts[0];
+          role = parts[1];
+        }
+      }
+
       current = {
-        company: parts[0] || 'Company',
-        role: parts[1] || parts[0] || 'Role',
+        company,
+        role,
         duration,
         description: '',
         location: location || undefined,
         employmentType: employmentType || undefined
       };
     } else if (current) {
-      if (/skills|certifications|awards|languages|tools/i.test(line) && line.length < 30) {
+      if (/^(?:skills|certifications|awards|languages|tools)\b/i.test(line.trim()) && line.length < 30) {
         flush();
       } else {
         descLines.push(line);
       }
     } else if (!current) {
-      const isTitleLike = line.length < 90 && !/^\d/.test(line);
+      const isBullet = /^[-*•–—\d.]/.test(line.trim());
+      const isTitleLike = !isBullet && line.length < 90 && !/^\d/.test(line);
       const parts = line.split(/[|,·•]/).map(p => p.trim()).filter(Boolean);
       if (isTitleLike && parts.length >= 2) {
         flush();
-        current = { company: parts[0], role: parts[1], duration: '', description: '' };
-      } else {
-        descLines.push(line);
+        let company = parts[0];
+        let role = parts[1];
+        const isPart0Role = roleKeywordPattern.test(parts[0]);
+        const isPart1Role = roleKeywordPattern.test(parts[1]);
+        const isPart0Company = companyKeywordPattern.test(parts[0]);
+        const isPart1Company = companyKeywordPattern.test(parts[1]);
+
+        if ((isPart0Role && !isPart1Role) || isPart1Company) {
+          role = parts[0];
+          company = parts[1];
+        } else if ((isPart1Role && !isPart0Role) || isPart0Company) {
+          company = parts[0];
+          role = parts[1];
+        }
+        current = { company, role, duration: '', description: '' };
       }
     }
   }
@@ -401,11 +437,13 @@ function extractEducation(eduLines: string[]) {
   const yearPattern = /\b(19|20)\d{2}\b/g;
   const dateRangePattern = /(\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?\s*\d{4}\s*[-–—to]+\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)?\s*(?:\d{4}|Present|Current|Now))/gi;
 
-  const degreePattern = /\b(B\.?S\.?|B\.?E\.?|B\.?Tech|M\.?S\.?|M\.?Tech|MBA|Ph\.?D|Bachelor|Master|Associate|Diploma|Certificate|B\.?A\.?|M\.?A\.?|B\.?Sc|M\.?Sc|High\s+School|Secondary)\b/i;
+  const degreePattern = /(?<!\b(?:to|will|can|may|must|shall|should|would|could)\s+)\b(Bachelor(?:\s+of\s+[A-Za-z]+)?|Master(?:\s+of\s+[A-Za-z]+)?|B\.?Tech|M\.?Tech|B\.?Sc|M\.?Sc|B\.E(?:\.|\b)|B\.S(?:\.|\b)|B\.A(?:\.|\b)|M\.S(?:\.|\b)|M\.A(?:\.|\b)|MBA|Ph\.?D|Associate|Diploma|Certificate|High\s+School|Secondary|Higher\s+Secondary|Intermediate|XII|X)\b/i;
+  const degreeAcronymPattern = /\b(BE|BS|BA|MS|MA)\b/;
+  const getDegreeMatch = (text: string) => text.match(degreePattern) || text.match(degreeAcronymPattern);
   
-  const schoolKeywords = /\b(University|College|Institute|GITAM|School|Academy|Polytechnic)\b/i;
+  const schoolKeywords = /\b(University|College|Institute|GITAM|School|Academy|Polytechnic|Vidyalaya|Campus)\b/i;
 
-  const gradePattern = /\b(\d\.\d{1,2}(?:\s*\/10)?\s*(?:CGPA|GPA)?|\d{2,3}(?:\.\d{1,2})?\s*%)\b/i;
+  const gradePattern = /\b(\d(?:\.\d{1,2})?(?:\s*\/10)?\s*(?:CGPA|GPA)|\d{2,3}(?:\.\d{1,2})?\s*%|(?:CGPA|GPA)\s*[:=]?\s*\d(?:\.\d{1,2})?(?:\s*\/10)?)\b/i;
 
   let current: typeof education[0] | null = null;
   let courseworkLines: string[] = [];
@@ -424,22 +462,61 @@ function extractEducation(eduLines: string[]) {
   };
 
   for (const line of eduLines) {
-    const hasDegree = degreePattern.test(line);
+    const hasDegree = degreePattern.test(line) || degreeAcronymPattern.test(line);
     const hasSchool = schoolKeywords.test(line);
     const gradeMatch = line.match(gradePattern);
     const dateRangeMatch = line.match(dateRangePattern);
     const years = line.match(yearPattern);
 
-    if (hasDegree || (hasSchool && !current)) {
+    // If current entry already has school, and this line has degree (multiline entry), attach it to current without flushing
+    if (current && current.school && !current.degree && hasDegree) {
+      const degMatch = getDegreeMatch(line);
+      current.degree = degMatch ? degMatch[0].trim() : '';
+
+      const lineAfterDegree = degMatch ? line.replace(degMatch[0], '') : line;
+      const studyMatch = lineAfterDegree.match(/\b(?:in|of|major in|specialization in)\s+([A-Za-z\s&,]+?)(?=\s*[-–—|•·(]|\s*(?:19|20)\d{2}|$)/i);
+      if (studyMatch && studyMatch[1]) {
+        current.fieldOfStudy = studyMatch[1].trim();
+      }
+      if (gradeMatch && !current.grade) {
+        current.grade = gradeMatch[0].trim();
+      }
+      if (dateRangeMatch && !current.year) {
+        current.year = dateRangeMatch[0].trim();
+      } else if (years && !current.year) {
+        current.year = years.join(' - ');
+      }
+      continue;
+    }
+
+    // If current entry has degree, and this line has school (multiline entry), attach school to current without flushing
+    if (current && current.degree && !current.school && hasSchool) {
+      current.school = line.trim();
+      if (gradeMatch && !current.grade) {
+        current.grade = gradeMatch[0].trim();
+      }
+      if (dateRangeMatch && !current.year) {
+        current.year = dateRangeMatch[0].trim();
+      } else if (years && !current.year) {
+        current.year = years.join(' - ');
+      }
+      continue;
+    }
+
+    // Starting a new education entry
+    if (hasDegree || hasSchool) {
       flush();
       
-      const degMatch = line.match(degreePattern);
-      const degreeName = degMatch ? degMatch[0].trim() : 'Degree';
+      const degMatch = getDegreeMatch(line);
+      const degreeName = degMatch ? degMatch[0].trim() : '';
 
       let fieldOfStudy = '';
-      const studyMatch = line.match(/\bin\b\s*([A-Za-z\s&]+)/i) || line.match(/\bof\b\s*([A-Za-z\s&]+)/i);
-      if (studyMatch) {
-        fieldOfStudy = studyMatch[1].split(/[|,·•\-–—(]/)[0].trim();
+      if (degMatch) {
+        const lineAfterDegree = line.replace(degMatch[0], '');
+        const studyMatch = lineAfterDegree.match(/\b(?:in|of|major in|specialization in)\s+([A-Za-z\s&,]+?)(?=\s*[-–—|•·(]|\s*(?:19|20)\d{2}|$)/i);
+        if (studyMatch && studyMatch[1]) {
+          fieldOfStudy = studyMatch[1].trim();
+        }
       }
 
       let startDate = '';
@@ -472,8 +549,8 @@ function extractEducation(eduLines: string[]) {
       if (!current.school && hasSchool) {
         current.school = line.trim();
       } else if (current.school && !current.degree && hasDegree) {
-        const degMatch = line.match(degreePattern);
-        current.degree = degMatch ? degMatch[0].trim() : 'Degree';
+        const degMatch = getDegreeMatch(line);
+        current.degree = degMatch ? degMatch[0].trim() : '';
       }
 
       if (!current.startDate && !current.endDate) {
@@ -671,8 +748,8 @@ function extractProjects(projectLines: string[]): ResumeProject[] {
   let descLines: string[] = [];
 
   const flush = () => {
-    if (current) {
-      current.description = descLines.join(' ').trim();
+    if (current && current.name) {
+      current.description = descLines.join('\n').trim();
       projects.push(current);
       current = null;
       descLines = [];
@@ -680,20 +757,26 @@ function extractProjects(projectLines: string[]): ResumeProject[] {
   };
 
   for (const line of projectLines) {
-    const isTitleLike = line.length < 80 && !/^\d/.test(line) && (line.includes("-") || line.includes("|") || line.split(" ").length <= 4);
-    const dateMatch = line.match(datePattern);
-    
-    if (isTitleLike && !line.toLowerCase().includes("coursework") && !line.toLowerCase().includes("skills")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const isBullet = /^[-*•·–—\d.]/.test(trimmed);
+    const dateMatch = trimmed.match(datePattern);
+    const hasTechOrPipe = trimmed.includes("|") || /\s+[-–—]\s+/.test(trimmed);
+    const isTitleLike = !isBullet && trimmed.length < 100 && (dateMatch !== null || hasTechOrPipe || (trimmed.split(" ").length <= 6 && !/[.!?]$/.test(trimmed)));
+
+    if (isTitleLike && !trimmed.toLowerCase().includes("coursework") && !trimmed.toLowerCase().includes("relevant skills")) {
       flush();
-      
-      const withoutDate = dateMatch ? line.replace(datePattern, '').trim() : line;
-      const parts = withoutDate.split(/[|-–—·•]/).map(p => p.trim()).filter(Boolean);
-      const name = parts[0] || 'Project Name';
+
+      let name = trimmed;
+      if (dateMatch) {
+        name = name.replace(datePattern, '').trim();
+      }
 
       let githubUrl = '';
       let liveUrl = '';
       let match;
-      while ((match = urlRegex.exec(line)) !== null) {
+      while ((match = urlRegex.exec(trimmed)) !== null) {
         const url = match[0].replace(/[.,;:()|\[\]{}]$/, '').trim();
         if (/github\.com/i.test(url)) {
           githubUrl = url;
@@ -701,13 +784,21 @@ function extractProjects(projectLines: string[]): ResumeProject[] {
           liveUrl = url;
         }
       }
+      name = name.replace(urlRegex, '').trim();
+
+      // Extract title cleanly: do not split on internal hyphens like E-Commerce
+      if (name.includes("|")) {
+        name = name.split("|")[0].trim();
+      } else if (/\s+[-–—]\s+/.test(name)) {
+        name = name.split(/\s+[-–—]\s+/)[0].trim();
+      }
 
       const lineTechs = techDictionary.filter(t => 
-        line.toLowerCase().includes(t.toLowerCase())
+        trimmed.toLowerCase().includes(t.toLowerCase())
       );
 
       current = {
-        name,
+        name: name || trimmed,
         description: '',
         duration: dateMatch ? dateMatch[0].trim() : undefined,
         githubUrl: githubUrl || undefined,
@@ -733,6 +824,14 @@ function extractProjects(projectLines: string[]): ResumeProject[] {
       }
 
       descLines.push(line);
+    } else {
+      // First line without prior title header
+      if (!isBullet) {
+        current = {
+          name: trimmed,
+          description: '',
+        };
+      }
     }
   }
   flush();
@@ -870,34 +969,34 @@ function validateAndCleanResumeData(data: StructuredResumeData): StructuredResum
   ];
   const jobKeywords = ["engineer", "developer", "analyst", "manager", "intern", "consultant", "specialist", "lead", "architect"];
 
-  // 1. Validate Work Experience entries
+  // 1. Move misplaced education out of work experience
   for (let i = experience.length - 1; i >= 0; i--) {
     const exp = experience[i];
     const isEdu = containsAny(exp.company, eduKeywords) || containsAny(exp.role, eduKeywords) || exp.description.toLowerCase().includes("coursework:");
     
-    if (isEdu && !containsAny(exp.role, jobKeywords)) {
+    if (isEdu && !containsAny(exp.role, jobKeywords) && !containsAny(exp.company, jobKeywords)) {
       education.push({
-        school: exp.company || "Verified University",
-        degree: exp.role || "Minor / Degree",
-        year: exp.duration || "N/A",
+        school: exp.company || "",
+        degree: exp.role || "",
+        year: exp.duration || "",
         fieldOfStudy: exp.location || ""
       });
       experience.splice(i, 1);
     }
   }
 
-  // Swap school and degree if school name looks like a degree designation
+  // Swap school and degree if school field accidentally contains the degree designation
   for (const edu of education) {
-    if (/^(B\.?Tech|M\.?Tech|B\.?S\.?|M\.?S\.?|B\.?E\.?|B\.?A\.?|M\.?A\.?|MBA|Ph\.?D|Bachelor|Master)/i.test(edu.school) && (!edu.degree || edu.degree === "Degree" || edu.degree.length === 0)) {
+    if (/^(B\.?Tech|M\.?Tech|B\.?S\.?|M\.?S\.?|B\.?E\.?|B\.?A\.?|M\.?A\.?|MBA|Ph\.?D|Bachelor|Master)/i.test(edu.school) && (!edu.degree || edu.degree.length === 0)) {
       edu.degree = edu.school;
-      edu.school = "Verified University";
+      edu.school = "";
     }
   }
 
-  // 2. Validate Education entries
+  // 2. Validate Education entries - move clear job roles out of education
   for (let i = education.length - 1; i >= 0; i--) {
     const edu = education[i];
-    if (containsAny(edu.degree, jobKeywords) && !containsAny(edu.school, eduKeywords)) {
+    if (containsAny(edu.degree, jobKeywords) && !containsAny(edu.school, eduKeywords) && edu.school.length > 0) {
       experience.push({
         company: edu.school,
         role: edu.degree,
@@ -908,22 +1007,10 @@ function validateAndCleanResumeData(data: StructuredResumeData): StructuredResum
     }
   }
 
-  // 3. Validate Projects entries
-  for (let i = projects.length - 1; i >= 0; i--) {
-    const proj = projects[i];
-    const companyNames = ["google", "microsoft", "amazon", "apple", "meta", "netflix", "uber", "tcs", "cognizant", "wipro", "infosys", "accenture"];
-    if (containsAny(proj.name, companyNames) && containsAny(proj.description, jobKeywords)) {
-      experience.push({
-        company: proj.name,
-        role: "Software Engineer",
-        duration: proj.duration || "N/A",
-        description: proj.description
-      });
-      projects.splice(i, 1);
-    }
-  }
+  // Note: Personal and academic projects MUST remain in projects.
+  // Never convert projects into employment based on company names or keywords.
 
-  // 4. Deduplicate Achievements
+  // 3. Deduplicate Achievements against Certifications / Projects
   for (let i = achievements.length - 1; i >= 0; i--) {
     const ach = achievements[i];
     const isCert = certifications.some(c => 
@@ -936,22 +1023,21 @@ function validateAndCleanResumeData(data: StructuredResumeData): StructuredResum
     }
 
     const isProj = projects.some(p =>
-      p.name.toLowerCase() === ach.title.toLowerCase() ||
-      p.name.toLowerCase().includes(ach.title.toLowerCase())
+      p.name.toLowerCase() === ach.title.toLowerCase()
     );
     if (isProj) {
       achievements.splice(i, 1);
     }
   }
 
-  // 5. Deduplicate Projects against Experience
+  // 4. Deduplicate Projects against Experience (only if exact duplicate company/role)
   for (let i = projects.length - 1; i >= 0; i--) {
     const proj = projects[i];
-    const isDuplicate = experience.some(exp =>
-      exp.company.toLowerCase() === proj.name.toLowerCase() ||
-      (exp.description.toLowerCase().includes(proj.name.toLowerCase()) && proj.name.length > 5)
+    const isExactDuplicate = experience.some(exp =>
+      exp.company.toLowerCase() === proj.name.toLowerCase() &&
+      exp.duration === proj.duration
     );
-    if (isDuplicate) {
+    if (isExactDuplicate) {
       projects.splice(i, 1);
     }
   }
