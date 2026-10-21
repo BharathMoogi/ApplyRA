@@ -695,7 +695,16 @@ function extractCategorizedSkills(skillLines: string[], fullText: string) {
 
 function extractSummary(summaryLines: string[], fullText: string): string {
   if (summaryLines.length > 0) {
-    return summaryLines.join('\n').trim();
+    const joined = summaryLines.join('\n').trim();
+    // Guard: if the "summary" section is actually a list of courses/certifications,
+    // return empty and let the AI generate a real summary.
+    const certLike = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|azure|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i;
+    const bulletLike = /^[-•*·]/m;
+    const lines = joined.split('\n').filter(Boolean);
+    const isCertList = lines.length > 0 && lines.every(l => certLike.test(l) || bulletLike.test(l.trim()));
+    if (!isCertList) {
+      return joined;
+    }
   }
 
   // Fallback: If no explicit summary header was found,
@@ -707,6 +716,7 @@ function extractSummary(summaryLines: string[], fullText: string): string {
   let skipLines = true;
   for (const line of lines) {
     const isContactLine = /@|phone|github|linkedin|http|www|^\+?\d[\d\s-]{7,}/i.test(line);
+    const isCertificateLine = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i.test(line);
     const isHeading = detectSection(line) !== null;
 
     if (isHeading) {
@@ -715,12 +725,12 @@ function extractSummary(summaryLines: string[], fullText: string): string {
 
     if (skipLines) {
       // Typically a summary paragraph is longer than typical header lines
-      if (!isContactLine && line.length > 25 && !/^[A-Z\s]+$/.test(line)) {
+      if (!isContactLine && !isCertificateLine && line.length > 25 && !/^[A-Z\s]+$/.test(line)) {
         skipLines = false;
         summaryCandidateLines.push(line);
       }
     } else {
-      if (!isContactLine) {
+      if (!isContactLine && !isCertificateLine) {
         summaryCandidateLines.push(line);
       }
     }

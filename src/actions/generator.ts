@@ -148,9 +148,17 @@ Generate a JSON object with:
     });
 
     // 5. Apply AI suggestions safely without duplicate content
+    // Guard: if the stored summary looks like a cert/course list, always use the AI-generated one
+    const certListPattern = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i;
+    const storedSummaryIsCertList = (currentResumeData.summary || '').split('\n')
+      .filter(Boolean)
+      .every(l => certListPattern.test(l));
+
     const tailoredData: StructuredResumeData = {
       ...currentResumeData,
-      summary: response.success && response.data.summary ? response.data.summary.trim() : (currentResumeData.summary || ""),
+      summary: response.success && response.data.summary
+        ? response.data.summary.trim()
+        : (storedSummaryIsCertList ? '' : (currentResumeData.summary || '')),
       skills: response.success
         ? Array.from(new Set([...(currentResumeData.skills || []), ...(response.data.additionalSkills || [])]))
         : (currentResumeData.skills || []),

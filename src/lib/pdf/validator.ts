@@ -89,13 +89,25 @@ export function validateResumeForExport(
   // Project Placeholders & Integrity
   if (data.projects && data.projects.length > 0) {
     data.projects.forEach((proj, idx) => {
-      checkPlaceholders(proj.name || "", "projects", `Project #${idx + 1} Title`);
       if (!proj.name || proj.name.trim().length === 0) {
         errors.push({
           type: "error",
           section: "projects",
           message: `Project entry #${idx + 1} is missing a title.`,
         });
+      } else {
+        // Placeholder check for projects is a warning (not blocking error)
+        // because "Project Name" may appear in legacy stored data
+        for (const pattern of PLACEHOLDER_PATTERNS) {
+          if (pattern.test(proj.name)) {
+            warnings.push({
+              type: "warning",
+              section: "projects",
+              message: `Project #${idx + 1} has a placeholder title "${proj.name.trim()}". Please update it with the real project name in the Resume Editor.`,
+            });
+            break;
+          }
+        }
       }
     });
   }
