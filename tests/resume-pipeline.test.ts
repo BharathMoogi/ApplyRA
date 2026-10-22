@@ -3,7 +3,7 @@ import { test, describe } from "node:test";
 import { parseResumeHybrid } from "../src/lib/parser";
 import { renderResumeHtml, generateResumePdf } from "../src/lib/pdf/generator";
 import { validateResumeForExport } from "../src/lib/pdf/validator";
-import { type StructuredResumeData } from "../src/actions/resumes";
+import type { StructuredResumeData } from "../src/actions/resumes";
 
 describe("ApplyRA Resume Pipeline Tests", () => {
   // Test 1: A project whose title contains a company name

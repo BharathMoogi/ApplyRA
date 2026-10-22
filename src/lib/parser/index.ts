@@ -5,6 +5,7 @@
  */
 
 import type { StructuredResumeData, ResumeProject, ResumeCertification, ResumeAchievement } from '@/actions/resumes';
+import { extractEntitiesWithSpaCy } from './spacyExtractor';
 
 // ────────────────────────────────────────────────────────────────────────────
 // SECTION HEADERS DETECTION
@@ -1072,7 +1073,16 @@ export async function parseResumeHybrid(
 ): Promise<StructuredResumeData> {
   const chunks = chunkIntoSections(rawText);
 
+  // Contact extraction
   const personal = extractContactInfo(chunks.contact, authName, rawText);
+
+  // Use spaCy to improve name detection if missing or generic
+  const spaEntities = await extractEntitiesWithSpaCy(rawText);
+  if (!personal.name || personal.name === authName) {
+    if (spaEntities.persons.length > 0) {
+      personal.name = spaEntities.persons[0];
+    }
+  }
 
   // Merge internships into experience source
   const experienceLines = [
@@ -1080,39 +1090,35 @@ export async function parseResumeHybrid(
     ...chunks.internships,
     ...(chunks.experience.length === 0 && chunks.internships.length === 0 ? chunks.other : []),
   ];
-  
+
   // Parse experiences (safeguards inside extractExperience will filter out education keywords)
   const experience = extractExperience(experienceLines);
 
-  // Try parsing education from education section first
+  // Education parsing (same as before)
   let education = extractEducation(chunks.education);
 
-  // Fallback: Scan the rawText or other chunks if education section wasn't populated or detected
+  // Fallback education detection
   if (education.length === 0) {
-    // Scan raw lines for anything that looks like a degree/school
     const rawLines = rawText.split('\n');
     const eduKeywords = /\b(B\.?S\.?|B\.?E\.?|B\.?Tech|M\.?S\.?|M\.?Tech|MBA|Ph\.?D|Bachelor|Master|Associate|Diploma|Certificate|B\.?A\.?|M\.?A\.?|B\.?Sc|M\.?Sc|University|College|Institute|GITAM|School)\b/i;
     const yearPattern = /\b(19|20)\d{2}\b/;
-    
-    // Find all lines containing education keywords
     const candidateLines = rawLines.filter(line => eduKeywords.test(line));
     if (candidateLines.length > 0) {
       education = extractEducation(candidateLines);
     }
   }
 
-  // Skills: dedicated section + keyword scan + achievements listed as skills
-  const skillsData = extractCategorizedSkills(
-    [...chunks.skills, ...chunks.achievements, ...chunks.certifications],
-    rawText
-  );
+  // Skills extraction (including achievements and certifications as sources)
+  const skillsData = extractCategorizedSkills([
+    ...chunks.skills,
+    ...chunks.achievements,
+    ...chunks.certifications,
+  ], rawText);
 
   const summary = extractSummary(chunks.summary, rawText);
 
   const projects = extractProjects(chunks.projects);
-
   const certifications = extractCertifications(chunks.certifications);
-
   const achievements = extractAchievements(chunks.achievements);
 
   const rawParsed = {
@@ -1126,7 +1132,7 @@ export async function parseResumeHybrid(
       portfolio: personal.portfolio || '',
       location: personal.location || '',
     },
-    experience: experience, // Strictly work experience (internships/jobs), no projects
+    experience,
     education,
     skills: skillsData.flatSkills,
     summary,
