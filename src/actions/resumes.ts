@@ -145,13 +145,27 @@ export async function uploadResume(formData: FormData) {
 
     if (fileName.toLowerCase().endsWith(".pdf")) {
       parsedText = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("PDF parsing timed out. Please check file format."));
+        }, 8000);
         try {
           const PDFParser = require("pdf2json");
           const pdfParser = new PDFParser(null, 1);
-          pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData.parserError));
-          pdfParser.on("pdfParser_dataReady", () => resolve(pdfParser.getRawTextContent()));
+          pdfParser.on("pdfParser_dataError", (errData: any) => {
+            clearTimeout(timeout);
+            reject(errData?.parserError || new Error("Failed to parse PDF"));
+          });
+          pdfParser.on("pdfParser_dataReady", () => {
+            clearTimeout(timeout);
+            try {
+              resolve(pdfParser.getRawTextContent());
+            } catch (e) {
+              reject(e);
+            }
+          });
           pdfParser.parseBuffer(buffer);
         } catch (e) {
+          clearTimeout(timeout);
           reject(e);
         }
       });
