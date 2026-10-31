@@ -1,10 +1,19 @@
+import os
+import gc
+from typing import List, Dict
 from fastapi import FastAPI, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import os
+
+# Optimize PyTorch CPU memory usage for 512MB RAM cloud environments (Render Free Tier)
+torch.set_num_threads(1)
+try:
+    torch.set_num_interop_threads(1)
+except Exception:
+    pass
 
 # Initialize FastAPI App
 app = FastAPI(
@@ -13,45 +22,79 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# API Key Security
+# API Key Security - Header name MUST match what ApplyRA sends: 'X-API-Key'
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-EXPECTED_API_KEY = os.getenv("OCCUPATION_API_KEY", "")
-
 def verify_api_key(api_key: str = Security(api_key_header)):
-    # If OCCUPATION_API_KEY is configured on server, enforce matching key
-    if EXPECTED_API_KEY:
-        if not api_key or api_key != EXPECTED_API_KEY:
+    # Check both OCCUPATION_API_KEY and API_KEY environment variable names
+    expected = os.getenv("OCCUPATION_API_KEY") or os.getenv("API_KEY") or ""
+    if expected:
+        if not api_key or api_key.strip() != expected.strip():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or missing X-API-Key header"
             )
     return api_key
 
-# Model & Tokenizer path (relative to this script or configured via env)
-MODEL_DIR = os.getenv("MODEL_PATH", "./model")
+# Robust Model Directory Resolution
+def resolve_model_dir() -> str:
+    env_path = os.getenv("MODEL_PATH")
+    candidates = [
+        env_path,
+        os.path.join(os.path.dirname(__file__), "model"),
+        "./model",
+        "../model"
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return os.path.abspath(c)
+    # Default to local model folder
+    return os.path.join(os.path.dirname(__file__), "model")
+
+MODEL_DIR = resolve_model_dir()
 
 # Global model and tokenizer holders
 model = None
 tokenizer = None
-id2label = {}
+id2label: Dict[int, str] = {}
 
 @app.on_event("startup")
 def load_model():
     global model, tokenizer, id2label
-    if os.path.exists(MODEL_DIR):
-        print(f"Loading DistilBERT model from {MODEL_DIR}...")
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
-        model.eval()
-        
-        # Load labels from model config
-        if hasattr(model.config, "id2label") and model.config.id2label:
-            id2label = {int(k): v for k, v in model.config.id2label.items()}
-        print(f"Model loaded successfully with {len(id2label)} classes: {id2label}")
+    resolved_dir = resolve_model_dir()
+    
+    if os.path.exists(resolved_dir):
+        print(f"[ApplyRA ML] Loading DistilBERT model from {resolved_dir}...")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(resolved_dir)
+            model = AutoModelForSequenceClassification.from_pretrained(
+                resolved_dir,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True
+            )
+            model.eval()
+
+            # 1. First attempt: load labels from model's saved id2label config
+            if hasattr(model.config, "id2label") and model.config.id2label:
+                id2label = {int(k): v for k, v in model.config.id2label.items()}
+
+            # 2. Fallback: check OCCUPATION_LABELS environment variable (comma-separated list of 9 labels)
+            labels_env = os.getenv("OCCUPATION_LABELS")
+            if (not id2label or any("LABEL_" in v for v in id2label.values())) and labels_env:
+                env_labels = [l.strip() for l in labels_env.split(",") if l.strip()]
+                id2label = {i: env_labels[i] for i in range(len(env_labels))}
+
+            # Force garbage collection to free any temporary loading buffers
+            gc.collect()
+
+            print(f"[ApplyRA ML] Model successfully loaded with {len(id2label)} classes: {id2label}")
+        except Exception as e:
+            print(f"[ApplyRA ML] Error loading model from {resolved_dir}: {e}")
+            model = None
+            tokenizer = None
     else:
-        print(f"WARNING: Model directory '{MODEL_DIR}' not found. Place your Google Drive model files here.")
+        print(f"[ApplyRA ML] WARNING: Model directory '{resolved_dir}' not found. Please add model files.")
 
 class PredictRequest(BaseModel):
     text: str
@@ -63,14 +106,15 @@ class AlternativePrediction(BaseModel):
 class PredictResponse(BaseModel):
     predicted_occupation: str
     confidence: float
-    top_predictions: list[AlternativePrediction]
+    top_predictions: List[AlternativePrediction]
 
 @app.get("/health")
 def health_check():
     return {
         "status": "ok",
         "model_loaded": model is not None,
-        "classes_count": len(id2label)
+        "classes_count": len(id2label),
+        "classes": id2label
     }
 
 @app.post("/predict", response_model=PredictResponse)
@@ -87,7 +131,7 @@ def predict(payload: PredictRequest, authenticated: str = Security(verify_api_ke
             detail="Resume text cannot be empty"
         )
 
-    # Tokenize input text (DistilBERT max 512 tokens)
+    # Tokenize input text (DistilBERT standard max length 512)
     inputs = tokenizer(
         payload.text,
         max_length=512,
@@ -96,15 +140,15 @@ def predict(payload: PredictRequest, authenticated: str = Security(verify_api_ke
         return_tensors="pt"
     )
 
-    with torch.no_grad():
+    with torch.inference_mode():
         outputs = model(**inputs)
         probabilities = F.softmax(outputs.logits, dim=1).squeeze(0)
 
-    # Top predictions
+    # Top-3 predictions
     k = min(3, len(probabilities))
     top_scores, top_indices = torch.topk(probabilities, k=k)
 
-    top_predictions = []
+    top_predictions: List[AlternativePrediction] = []
     for score, idx in zip(top_scores.tolist(), top_indices.tolist()):
         label_name = id2label.get(idx, f"Category_{idx}")
         top_predictions.append(
