@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { FileText, MoreVertical, Trash2, Check, Star, Edit, Loader2, Download } from "lucide-react";
 import { setPrimaryResume, deleteResume } from "@/actions/resumes";
 import { formatDate } from "@/lib/utils";
+import { OccupationBadge } from "@/components/dashboard/occupation-badge";
+import type { OccupationPrediction } from "@/components/dashboard/occupation-badge";
 
 interface Resume {
   id: string;
@@ -16,6 +18,13 @@ interface Resume {
   content: string | null;
   createdAt: Date;
   updatedAt: Date;
+  // ML classification fields
+  occupationCategory: string | null;
+  occupationConfidence: number | null;
+  occupationAlternatives: OccupationPrediction[] | null;
+  classificationStatus: string;
+  classifiedAt: Date | null;
+  classificationError: string | null;
 }
 
 interface ResumeListProps {
@@ -231,6 +240,22 @@ export function ResumeList({ resumes, onRefresh, onEdit }: ResumeListProps) {
               )}
             </CardHeader>
             <CardContent className="pt-0">
+              {/* Occupation classification badge */}
+              <div className="mb-3">
+                <OccupationBadge
+                  resumeId={resume.id}
+                  status={resume.classificationStatus ?? "NOT_RUN"}
+                  category={resume.occupationCategory ?? null}
+                  confidence={resume.occupationConfidence ?? null}
+                  alternatives={
+                    Array.isArray(resume.occupationAlternatives)
+                      ? (resume.occupationAlternatives as OccupationPrediction[])
+                      : null
+                  }
+                  onComplete={onRefresh}
+                />
+              </div>
+
               <div className="flex items-center gap-2 mt-4 border-t border-dashed pt-3">
                 {/* Make default button */}
                 {!resume.isDefault && (

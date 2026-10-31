@@ -6,6 +6,7 @@ import { ResumeUploadZone } from "@/components/dashboard/resume-upload-zone";
 import { ResumeList } from "@/components/dashboard/resume-list";
 import { ResumeEditor } from "@/components/dashboard/resume-editor";
 import { Loading } from "@/components/shared/loading";
+import type { OccupationPrediction } from "@/components/dashboard/occupation-badge";
 
 interface Resume {
   id: string;
@@ -15,6 +16,13 @@ interface Resume {
   content: string | null;
   createdAt: Date;
   updatedAt: Date;
+  // ML classification fields
+  occupationCategory: string | null;
+  occupationConfidence: number | null;
+  occupationAlternatives: OccupationPrediction[] | null;
+  classificationStatus: string;
+  classifiedAt: Date | null;
+  classificationError: string | null;
 }
 
 export default function ResumesPage() {
@@ -32,6 +40,11 @@ export default function ResumesPage() {
         ...r,
         createdAt: new Date(r.createdAt),
         updatedAt: new Date(r.updatedAt),
+        classifiedAt: r.classifiedAt ? new Date(r.classifiedAt) : null,
+        classificationStatus: r.classificationStatus ?? "NOT_RUN",
+        occupationAlternatives: Array.isArray(r.occupationAlternatives)
+          ? (r.occupationAlternatives as unknown as OccupationPrediction[])
+          : null,
       }));
       setResumes(mapped);
     } catch (err) {

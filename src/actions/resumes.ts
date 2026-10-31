@@ -197,8 +197,40 @@ export async function uploadResume(formData: FormData) {
         fileUrl: `/uploads/${Date.now()}_${fileName}`,
         isDefault,
         content: JSON.stringify(parsedData),
+        rawText: parsedText,
       },
     });
+
+    // Auto-classify occupation — non-blocking, never fails the upload
+    try {
+      const { classifyResumeOccupation } = await import("@/lib/ml/classifier");
+      const classResult = await classifyResumeOccupation(parsedText);
+      if (classResult.success) {
+        await prisma.resume.update({
+          where: { id: resume.id },
+          data: {
+            occupationCategory: classResult.data.predictedOccupation,
+            occupationConfidence: classResult.data.confidence,
+            occupationAlternatives: classResult.data.topPredictions as any,
+            classificationStatus: "COMPLETED",
+            classifiedAt: new Date(),
+          },
+        });
+      } else if (!classResult.notConfigured) {
+        await prisma.resume.update({
+          where: { id: resume.id },
+          data: {
+            classificationStatus: "FAILED",
+            classificationError: classResult.error,
+          },
+        });
+      }
+    } catch (classErr) {
+      console.warn(
+        "[uploadResume] Occupation classification failed (non-blocking):",
+        classErr
+      );
+    }
 
     revalidatePath("/resumes");
     return { success: true, resume };

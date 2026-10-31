@@ -69,6 +69,17 @@ model Resume {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Original extracted resume text
+  rawText String? @map("raw_text") @db.Text
+
+  // Occupation classification
+  occupationCategory     String?              @map("occupation_category") @db.VarChar(255)
+  occupationConfidence   Float?               @map("occupation_confidence")
+  occupationAlternatives Json?                @map("occupation_alternatives")
+  classificationStatus   ClassificationStatus @default(NOT_RUN) @map("classification_status")
+  classifiedAt           DateTime?            @map("classified_at")
+  classificationError    String?              @map("classification_error") @db.Text
+
   // Relations
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
@@ -77,6 +88,13 @@ model Resume {
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum ClassificationStatus {
+  NOT_RUN
+  PENDING
+  COMPLETED
+  FAILED
+}
 
 enum ApplicationStatus {
   DRAFT
