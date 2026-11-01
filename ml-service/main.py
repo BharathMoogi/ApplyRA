@@ -1,5 +1,6 @@
 import os
 import gc
+import json
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
@@ -8,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# Optimize PyTorch CPU memory usage for 512MB RAM cloud environments (Render Free Tier)
+# Optimize PyTorch CPU memory usage for cloud environments (Render Free Tier 512MB RAM)
 torch.set_num_threads(1)
 try:
     torch.set_num_interop_threads(1)
@@ -37,8 +38,8 @@ def verify_api_key(api_key: str = Security(api_key_header)):
             )
     return api_key
 
-# Robust Model Directory Resolution
-def resolve_model_dir() -> str:
+# Model Directory Resolution (for local fallback)
+def resolve_local_model_dir() -> str:
     env_path = os.getenv("MODEL_PATH")
     candidates = [
         env_path,
@@ -49,52 +50,93 @@ def resolve_model_dir() -> str:
     for c in candidates:
         if c and os.path.exists(c):
             return os.path.abspath(c)
-    # Default to local model folder
     return os.path.join(os.path.dirname(__file__), "model")
-
-MODEL_DIR = resolve_model_dir()
 
 # Global model and tokenizer holders
 model = None
 tokenizer = None
 id2label: Dict[int, str] = {}
+loaded_source: str = ""
 
 @app.on_event("startup")
 def load_model():
-    global model, tokenizer, id2label
-    resolved_dir = resolve_model_dir()
+    global model, tokenizer, id2label, loaded_source
     
-    if os.path.exists(resolved_dir):
-        print(f"[ApplyRA ML] Loading DistilBERT model from {resolved_dir}...")
+    # 1. Check if Hugging Face Hub model ID is configured
+    hf_model_id = os.getenv("HF_MODEL_ID") or os.getenv("HUGGINGFACE_REPO_ID") or ""
+    hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or None
+
+    if hf_model_id:
+        print(f"[ApplyRA ML] Loading DistilBERT model from Hugging Face Hub: {hf_model_id}...")
         try:
-            tokenizer = AutoTokenizer.from_pretrained(resolved_dir)
+            tokenizer = AutoTokenizer.from_pretrained(
+                hf_model_id,
+                token=hf_token
+            )
             model = AutoModelForSequenceClassification.from_pretrained(
-                resolved_dir,
+                hf_model_id,
+                token=hf_token,
                 torch_dtype=torch.float32,
                 low_cpu_mem_usage=True
             )
             model.eval()
-
-            # 1. First attempt: load labels from model's saved id2label config
-            if hasattr(model.config, "id2label") and model.config.id2label:
-                id2label = {int(k): v for k, v in model.config.id2label.items()}
-
-            # 2. Fallback: check OCCUPATION_LABELS environment variable (comma-separated list of 9 labels)
-            labels_env = os.getenv("OCCUPATION_LABELS")
-            if (not id2label or any("LABEL_" in v for v in id2label.values())) and labels_env:
-                env_labels = [l.strip() for l in labels_env.split(",") if l.strip()]
-                id2label = {i: env_labels[i] for i in range(len(env_labels))}
-
-            # Force garbage collection to free any temporary loading buffers
-            gc.collect()
-
-            print(f"[ApplyRA ML] Model successfully loaded with {len(id2label)} classes: {id2label}")
+            loaded_source = f"huggingface:{hf_model_id}"
+            print(f"[ApplyRA ML] Model successfully downloaded and loaded from Hugging Face Hub!")
         except Exception as e:
-            print(f"[ApplyRA ML] Error loading model from {resolved_dir}: {e}")
+            print(f"[ApplyRA ML] ERROR loading from Hugging Face Hub ({hf_model_id}): {e}")
             model = None
             tokenizer = None
-    else:
-        print(f"[ApplyRA ML] WARNING: Model directory '{resolved_dir}' not found. Please add model files.")
+
+    # 2. Fallback to local directory if HF is not configured or failed
+    if model is None:
+        local_dir = resolve_local_model_dir()
+        if os.path.exists(local_dir):
+            print(f"[ApplyRA ML] Loading DistilBERT model from local directory: {local_dir}...")
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(local_dir)
+                model = AutoModelForSequenceClassification.from_pretrained(
+                    local_dir,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True
+                )
+                model.eval()
+                loaded_source = f"local:{local_dir}"
+                print(f"[ApplyRA ML] Model successfully loaded from local directory!")
+            except Exception as e:
+                print(f"[ApplyRA ML] ERROR loading from local directory ({local_dir}): {e}")
+                model = None
+                tokenizer = None
+        else:
+            print(f"[ApplyRA ML] WARNING: No model found. Set HF_MODEL_ID + HF_TOKEN, or place model files in {local_dir}.")
+
+    # 3. Resolve Class Labels
+    if model is not None:
+        # A. First check model's config.id2label
+        if hasattr(model.config, "id2label") and model.config.id2label:
+            id2label = {int(k): v for k, v in model.config.id2label.items()}
+
+        # B. Fallback: check local labels.json if id2label is missing or generic (e.g. LABEL_0)
+        local_labels_path = os.path.join(os.path.dirname(__file__), "model", "labels.json")
+        if (not id2label or any("LABEL_" in v for v in id2label.values())) and os.path.exists(local_labels_path):
+            try:
+                with open(local_labels_path, "r", encoding="utf-8") as f:
+                    label_list = json.load(f)
+                    id2label = {i: label_list[i] for i in range(len(label_list))}
+            except Exception as e:
+                print(f"[ApplyRA ML] Could not load labels.json: {e}")
+
+        # C. Fallback: check OCCUPATION_LABELS env var (comma-separated)
+        labels_env = os.getenv("OCCUPATION_LABELS")
+        if (not id2label or any("LABEL_" in v for v in id2label.values())) and labels_env:
+            env_labels = [l.strip() for l in labels_env.split(",") if l.strip()]
+            id2label = {i: env_labels[i] for i in range(len(env_labels))}
+
+        # Force garbage collection to free any temporary loading buffers
+        gc.collect()
+
+        print(f"[ApplyRA ML] Total active occupation categories: {len(id2label)}")
+        for idx, lbl in sorted(id2label.items()):
+            print(f"  [{idx}]: {lbl}")
 
 class PredictRequest(BaseModel):
     text: str
@@ -113,6 +155,7 @@ def health_check():
     return {
         "status": "ok",
         "model_loaded": model is not None,
+        "source": loaded_source or "none",
         "classes_count": len(id2label),
         "classes": id2label
     }
@@ -122,7 +165,7 @@ def predict(payload: PredictRequest, authenticated: str = Security(verify_api_ke
     if model is None or tokenizer is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model is not loaded. Please ensure model files are placed in the model directory."
+            detail="Model is not loaded. Please verify HF_MODEL_ID and HF_TOKEN on Render."
         )
 
     if not payload.text or not payload.text.strip():
