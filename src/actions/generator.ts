@@ -147,6 +147,19 @@ Generate a JSON object with:
       schema: OptimizationSchema,
     });
 
+    // If AI provider call failed, surface the real error immediately
+    if (!response.success) {
+      console.error('[generateCustomizedResume] AI provider failed:', response.error);
+      const errorMsg = response.error || 'Unknown AI error';
+      const isKeyError = /api key|apikey|missing|unauthorized|401|403/i.test(errorMsg);
+      return {
+        success: false,
+        error: isKeyError
+          ? `AI provider error: API key not configured. Set GOOGLE_GENERATIVE_AI_API_KEY (Gemini), ANTHROPIC_API_KEY (Claude), or GROQ_API_KEY in your Vercel environment variables.`
+          : `AI generation failed: ${errorMsg}`
+      };
+    }
+
     // 5. Apply AI suggestions safely without duplicate content
     // Guard: if the stored summary looks like a cert/course list, always use the AI-generated one
     const certListPattern = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i;

@@ -12,8 +12,24 @@ class AIServiceManager {
     this.providers.set('gemini', new GeminiProvider());
     this.providers.set('groq', new GroqProvider());
 
+    // 1. Honour explicit AI_PROVIDER env var
     const envVal = (process.env.AI_PROVIDER || "").trim();
-    this.activeProviderName = envVal && envVal.length > 0 ? envVal : 'gemini';
+    if (envVal && this.providers.has(envVal)) {
+      this.activeProviderName = envVal;
+    } else {
+      // 2. Auto-detect: pick the first provider whose API key is present
+      if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+        this.activeProviderName = 'gemini';
+      } else if (process.env.ANTHROPIC_API_KEY) {
+        this.activeProviderName = 'claude';
+      } else if (process.env.GROQ_API_KEY) {
+        this.activeProviderName = 'groq';
+      } else {
+        // Default fallback – will fail at call time with a clear error
+        this.activeProviderName = 'gemini';
+      }
+    }
+    console.log(`[AI] Active provider: ${this.activeProviderName}`);
   }
 
   getProvider(name?: string): AIProvider {

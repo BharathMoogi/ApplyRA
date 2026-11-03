@@ -702,19 +702,32 @@ function extractCategorizedSkills(skillLines: string[], fullText: string) {
 function isContactOrHeaderLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return true;
-  // Email or Phone
+
+  // Email
   if (/@[\w.-]+\.[a-zA-Z]{2,}/.test(trimmed)) return true;
+
+  // Phone number (standalone or mixed in line)
   if (/(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.test(trimmed)) return true;
   if (/(\+?\d[\d\s\-().]{8,}\d)/.test(trimmed) && trimmed.replace(/[^0-9]/g, '').length >= 10) return true;
 
-  // Social handles / pipe links like "GitHub | Portfolio | LinkedIn"
-  if (/\b(?:github|portfolio|linkedin|website)\b/i.test(trimmed) && (trimmed.includes('|') || trimmed.includes('/') || trimmed.includes('.'))) return true;
+  // Social handle URLs: github.com/..., linkedin.com/..., etc.
+  if (/\b(?:github|linkedin|portfolio|website)\b/i.test(trimmed) && /[/.]/.test(trimmed)) return true;
 
-  // Location pattern with pipes like "Bengaluru, India | +91-..."
-  if (trimmed.includes('|') && /\b(?:india|usa|united states|uk|karnataka|bengaluru|bangalore|delhi|mumbai|hyderabad|pune|california|san francisco)\b/i.test(trimmed)) return true;
+  // Location line possibly joined with contact: "City, Country | phone | email"
+  if (/\b(?:india|usa|united states|uk|karnataka|bengaluru|bangalore|delhi|mumbai|hyderabad|pune|california|san francisco)\b/i.test(trimmed) && trimmed.includes('|')) return true;
 
-  // Headline tags like "AI Engineer | Generative AI | Python Developer"
-  if (trimmed.includes('|') && trimmed.split('|').length >= 2 && trimmed.length < 90 && !/[.!?]$/.test(trimmed)) return true;
+  // Pure pipe-separated short tokens that are contact/social labels (no sentences)
+  // e.g. "GitHub | Portfolio | LinkedIn" or "GitHub | Portfolio | LinkedIn | Website"
+  // But NOT "AI Engineer | Generative AI | Python Developer" — those are useful headline text
+  if (trimmed.includes('|')) {
+    const parts = trimmed.split('|').map(p => p.trim());
+    const allPartsAreContacty = parts.every(p =>
+      /\b(?:github|portfolio|linkedin|website|twitter|behance|dribbble|instagram|facebook|medium|blog|resume|cv)\b/i.test(p) ||
+      /@[\w.-]+\.[a-zA-Z]{2,}/.test(p) ||
+      /\d{7,}/.test(p)
+    );
+    if (allPartsAreContacty) return true;
+  }
 
   return false;
 }
@@ -746,6 +759,8 @@ function extractSummary(summaryLines: string[], fullText: string): string {
     const isContactLine = isContactOrHeaderLine(line) || /@|phone|github|linkedin|http|www|^\+?\d[\d\s-]{7,}/i.test(line);
     const isCertificateLine = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i.test(line);
     const isHeading = detectSection(line) !== null;
+    // Also skip lines that look like "City, Country" or contain a phone number mixed with city
+    const isLocationOrPhone = /^\+?\d|(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.test(line);
 
     if (isHeading) {
       if (!skipLines) break; // stop at any major header
@@ -754,12 +769,12 @@ function extractSummary(summaryLines: string[], fullText: string): string {
 
     if (skipLines) {
       // Typically a summary paragraph is longer than typical header lines
-      if (!isContactLine && !isCertificateLine && line.length > 25 && !/^[A-Z\s]+$/.test(line)) {
+      if (!isContactLine && !isCertificateLine && !isLocationOrPhone && line.length > 40 && !/^[A-Z\s]+$/.test(line)) {
         skipLines = false;
         summaryCandidateLines.push(line);
       }
     } else {
-      if (!isContactLine && !isCertificateLine) {
+      if (!isContactLine && !isCertificateLine && !isLocationOrPhone) {
         summaryCandidateLines.push(line);
       }
     }
