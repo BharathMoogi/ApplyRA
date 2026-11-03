@@ -34,7 +34,7 @@ export async function classifyResumeOccupation(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout to allow Render free tier spin-up
 
   try {
     const headers: Record<string, string> = {
