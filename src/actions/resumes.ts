@@ -155,12 +155,50 @@ export async function uploadResume(formData: FormData) {
             clearTimeout(timeout);
             reject(errData?.parserError || new Error("Failed to parse PDF"));
           });
-          pdfParser.on("pdfParser_dataReady", () => {
+          pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
             clearTimeout(timeout);
             try {
-              resolve(pdfParser.getRawTextContent());
+              // Extract text sorted geometrically from top to bottom (y) and left to right (x)
+              function safeDecode(str: string) {
+                try {
+                  return decodeURIComponent(str);
+                } catch {
+                  return unescape(str);
+                }
+              }
+
+              const lines: string[] = [];
+              for (const page of pdfData?.Pages || []) {
+                const texts = [...(page.Texts || [])];
+                texts.sort((a: any, b: any) => {
+                  if (Math.abs(a.y - b.y) < 0.25) return a.x - b.x;
+                  return a.y - b.y;
+                });
+
+                let currentY = -1;
+                let currentLine: string[] = [];
+                for (const t of texts) {
+                  const textStr = safeDecode(t.R?.[0]?.T || "").trim();
+                  if (!textStr) continue;
+                  if (currentY === -1 || Math.abs(t.y - currentY) >= 0.25) {
+                    if (currentLine.length > 0) lines.push(currentLine.join(" "));
+                    currentLine = [textStr];
+                    currentY = t.y;
+                  } else {
+                    currentLine.push(textStr);
+                  }
+                }
+                if (currentLine.length > 0) lines.push(currentLine.join(" "));
+              }
+
+              const sortedText = lines.join("\n").trim();
+              resolve(sortedText || pdfParser.getRawTextContent());
             } catch (e) {
-              reject(e);
+              try {
+                resolve(pdfParser.getRawTextContent());
+              } catch (innerErr) {
+                reject(e);
+              }
             }
           });
           pdfParser.parseBuffer(buffer);

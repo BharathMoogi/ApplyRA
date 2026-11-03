@@ -185,6 +185,22 @@ function extractContactInfo(contactLines: string[], authName: string, fullText: 
   const contactText = contactLines.join('\n');
   const searchText = contactText + '\n' + fullText;
 
+  // 0. Name extraction: prefer actual candidate name if top contact line looks like a person's name
+  let name = authName;
+  for (const line of contactLines.slice(0, 3)) {
+    const trimmed = line.replace(/[|•·,].*$/, '').trim();
+    if (
+      trimmed &&
+      !/@|phone|github|linkedin|http|\.com|\.io|\.app|\d/i.test(trimmed) &&
+      !/resume|curriculum|vitae|engineer|developer|analyst|manager|specialist|intern/i.test(trimmed) &&
+      trimmed.split(/\s+/).length >= 2 &&
+      trimmed.split(/\s+/).length <= 4
+    ) {
+      name = trimmed;
+      break;
+    }
+  }
+
   // 1. Email extraction & validation
   const emailMatch = searchText.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,6}/);
   let email = emailMatch ? emailMatch[0].trim() : '';
@@ -200,52 +216,41 @@ function extractContactInfo(contactLines: string[], authName: string, fullText: 
     phone = ''; // Invalid phone
   }
 
-  // 3. Extract all links/URLs in text
-  const urlRegex = /(https?:\/\/[^\s|]+|www\.[^\s|]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\/[^\s|]*)/gi;
-  const urls: string[] = [];
-  let match;
-  while ((match = urlRegex.exec(searchText)) !== null) {
-    // Strip trailing punctuation and layout characters like pipes (|), backslashes, etc.
-    const candidate = match[0].replace(/[.,;:()|\[\]{}]$/, '').trim();
-    if (!urls.includes(candidate)) {
-      urls.push(candidate);
-    }
-  }
-
-  // Helper to validate URLs
-  const isValidUrl = (url: string) => {
-    try {
-      new URL(url.startsWith('http') ? url : 'https://' + url);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
+  // 3. Extract all links/URLs in text (supporting pipes, tokens, and standard formats)
+  const tokens = searchText.split(/[\s|]+/).map(t => t.trim().replace(/[.,;:()|\[\]{}]$/, ''));
   let linkedin = '';
   let github = '';
   let portfolio = '';
 
-  for (const url of urls) {
-    if (!isValidUrl(url)) continue;
-    
-    // Normalize to standard link format
-    const normalized = url.startsWith('http') ? url : 'https://' + url;
+  for (const token of tokens) {
+    if (!token || /@/.test(token)) continue;
 
-    if (/linkedin\.com/i.test(normalized) && !linkedin) {
-      linkedin = normalized;
-    } else if (/github\.com/i.test(normalized) && !github) {
-      github = normalized;
-    } else if (!/linkedin\.com|github\.com/i.test(normalized) && !portfolio) {
-      portfolio = normalized;
+    // Check LinkedIn
+    if (/linkedin\.com\/(?:in|pub)\/[a-zA-Z0-9_-]+/i.test(token)) {
+      linkedin = token.startsWith('http') ? token : 'https://' + token;
+    } else if (/linkedin\.com/i.test(token) && !linkedin) {
+      linkedin = token.startsWith('http') ? token : 'https://' + token;
+    }
+    // Check GitHub
+    else if (/github\.com\/[a-zA-Z0-9_-]+/i.test(token)) {
+      github = token.startsWith('http') ? token : 'https://' + token;
+    } else if (/github\.com/i.test(token) && !github) {
+      github = token.startsWith('http') ? token : 'https://' + token;
+    }
+    // Check Portfolio / Website (exclude degree acronyms like B.Tech / M.Tech)
+    else if (
+      /\.(?:vercel\.app|github\.io|netlify\.app|pages\.dev|me|dev|io|tech|site|online|app|com)\b/i.test(token) &&
+      !/gmail|yahoo|hotmail|outlook|linkedin|github/i.test(token) &&
+      !/\b(?:b|m|b\.sc|m\.sc)\.tech\b/i.test(token) &&
+      !portfolio
+    ) {
+      portfolio = token.startsWith('http') ? token : 'https://' + token;
     }
   }
 
   // 4. Location extraction
-  // Search for patterns like "City, State", "City, Country"
-  // Exclude lines containing common words like email, phone, university, school, or URLs
-  // Crucial: Exclude technical keywords and skills (like AWS, CDK, Lambda, Java) from matching as a location
-  const locationKeywordsToExclude = /email|phone|github|linkedin|http|www|education|skills|experience|present|resume|curriculum|aws|cdk|lambda|cloud|api|devops|docker|kubernetes|software|developer|engineer|manager|git|react|angular|node|postgresql/i;
+  // Exclude technical keywords, metrics (CAC, LTV), and skills (like AWS, CDK, Python, SQL) from matching as a location
+  const locationKeywordsToExclude = /email|phone|github|linkedin|http|www|education|skills|experience|present|resume|curriculum|aws|cdk|lambda|cloud|api|devops|docker|kubernetes|software|developer|engineer|manager|git|react|angular|node|postgresql|python|sql|java|c\+\+|power bi|pandas|numpy|cac|ltv|kpi/i;
   let location = '';
 
   for (const line of contactLines) {
@@ -272,10 +277,10 @@ function extractContactInfo(contactLines: string[], authName: string, fullText: 
   }
 
   return {
-    name: authName,
+    name,
     email,
     phone,
-    website: portfolio || '', // Only set website to portfolio (do not fallback to linkedin/github)
+    website: portfolio || '',
     linkedin,
     github,
     portfolio,
@@ -694,17 +699,39 @@ function extractCategorizedSkills(skillLines: string[], fullText: string) {
   };
 }
 
+function isContactOrHeaderLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  // Email or Phone
+  if (/@[\w.-]+\.[a-zA-Z]{2,}/.test(trimmed)) return true;
+  if (/(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/.test(trimmed)) return true;
+  if (/(\+?\d[\d\s\-().]{8,}\d)/.test(trimmed) && trimmed.replace(/[^0-9]/g, '').length >= 10) return true;
+
+  // Social handles / pipe links like "GitHub | Portfolio | LinkedIn"
+  if (/\b(?:github|portfolio|linkedin|website)\b/i.test(trimmed) && (trimmed.includes('|') || trimmed.includes('/') || trimmed.includes('.'))) return true;
+
+  // Location pattern with pipes like "Bengaluru, India | +91-..."
+  if (trimmed.includes('|') && /\b(?:india|usa|united states|uk|karnataka|bengaluru|bangalore|delhi|mumbai|hyderabad|pune|california|san francisco)\b/i.test(trimmed)) return true;
+
+  // Headline tags like "AI Engineer | Generative AI | Python Developer"
+  if (trimmed.includes('|') && trimmed.split('|').length >= 2 && trimmed.length < 90 && !/[.!?]$/.test(trimmed)) return true;
+
+  return false;
+}
+
 function extractSummary(summaryLines: string[], fullText: string): string {
   if (summaryLines.length > 0) {
-    const joined = summaryLines.join('\n').trim();
-    // Guard: if the "summary" section is actually a list of courses/certifications,
-    // return empty and let the AI generate a real summary.
-    const certLike = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|azure|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i;
-    const bulletLike = /^[-•*·]/m;
-    const lines = joined.split('\n').filter(Boolean);
-    const isCertList = lines.length > 0 && lines.every(l => certLike.test(l) || bulletLike.test(l.trim()));
-    if (!isCertList) {
-      return joined;
+    // Filter out any contact/header lines that leaked into the summary chunk
+    const cleanedLines = summaryLines.filter(l => !isContactOrHeaderLine(l));
+    const joined = cleanedLines.join('\n').trim();
+    if (joined.length > 0) {
+      const certLike = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|azure|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i;
+      const bulletLike = /^[-•*·]/m;
+      const lines = joined.split('\n').filter(Boolean);
+      const isCertList = lines.length > 0 && lines.every(l => certLike.test(l) || bulletLike.test(l.trim()));
+      if (!isCertList) {
+        return joined;
+      }
     }
   }
 
@@ -716,12 +743,13 @@ function extractSummary(summaryLines: string[], fullText: string): string {
   
   let skipLines = true;
   for (const line of lines) {
-    const isContactLine = /@|phone|github|linkedin|http|www|^\+?\d[\d\s-]{7,}/i.test(line);
+    const isContactLine = isContactOrHeaderLine(line) || /@|phone|github|linkedin|http|www|^\+?\d[\d\s-]{7,}/i.test(line);
     const isCertificateLine = /\b(in progress|coursera|udemy|microsoft|cisco|google|aws|certification|certified|specialization|nanodegree|intro to|fundamentals of)\b/i.test(line);
     const isHeading = detectSection(line) !== null;
 
     if (isHeading) {
-      break; // stop at any major header
+      if (!skipLines) break; // stop at any major header
+      continue;
     }
 
     if (skipLines) {
@@ -1064,6 +1092,37 @@ function validateAndCleanResumeData(data: StructuredResumeData): StructuredResum
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// TEXT ORIENTATION NORMALIZATION
+// ────────────────────────────────────────────────────────────────────────────
+
+export function normalizeTextOrientation(rawText: string): string {
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 5) return rawText;
+
+  const topLines = lines.slice(0, Math.ceil(lines.length * 0.3)).join(' ');
+  const bottomLines = lines.slice(Math.floor(lines.length * 0.7)).join(' ');
+
+  const emailRegex = /[\w.+-]+@[\w-]+\.[a-zA-Z]{2,6}/;
+  const phoneRegex = /(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\+?\d[\d\s\-().]{8,15}\d/;
+
+  const hasContactInTop = emailRegex.test(topLines) || phoneRegex.test(topLines);
+  const hasContactInBottom = emailRegex.test(bottomLines) || phoneRegex.test(bottomLines);
+
+  // If contact info is missing from top and found in bottom, the text was extracted bottom-up!
+  if (!hasContactInTop && hasContactInBottom) {
+    return lines.reverse().join('\n');
+  }
+
+  // Also check if EDUCATION or CERTIFICATIONS appears in the first 2 lines while SUMMARY / ABOUT ME is in bottom third
+  const firstTwo = lines.slice(0, 2).join(' ');
+  if (/^(?:education|certifications|academic)/i.test(firstTwo) && /summary|about me|objective|professional profile/i.test(bottomLines)) {
+    return lines.reverse().join('\n');
+  }
+
+  return rawText;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // MAIN ORCHESTRATOR
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1071,13 +1130,14 @@ export async function parseResumeHybrid(
   rawText: string,
   authName: string
 ): Promise<StructuredResumeData> {
-  const chunks = chunkIntoSections(rawText);
+  const normalizedText = normalizeTextOrientation(rawText);
+  const chunks = chunkIntoSections(normalizedText);
 
   // Contact extraction
-  const personal = extractContactInfo(chunks.contact, authName, rawText);
+  const personal = extractContactInfo(chunks.contact, authName, normalizedText);
 
   // Use spaCy to improve name detection if missing or generic
-  const spaEntities = await extractEntitiesWithSpaCy(rawText);
+  const spaEntities = await extractEntitiesWithSpaCy(normalizedText);
   if (!personal.name || personal.name === authName) {
     if (spaEntities.persons.length > 0) {
       personal.name = spaEntities.persons[0];
@@ -1099,7 +1159,7 @@ export async function parseResumeHybrid(
 
   // Fallback education detection
   if (education.length === 0) {
-    const rawLines = rawText.split('\n');
+    const rawLines = normalizedText.split('\n');
     const eduKeywords = /\b(B\.?S\.?|B\.?E\.?|B\.?Tech|M\.?S\.?|M\.?Tech|MBA|Ph\.?D|Bachelor|Master|Associate|Diploma|Certificate|B\.?A\.?|M\.?A\.?|B\.?Sc|M\.?Sc|University|College|Institute|GITAM|School)\b/i;
     const yearPattern = /\b(19|20)\d{2}\b/;
     const candidateLines = rawLines.filter(line => eduKeywords.test(line));
@@ -1113,9 +1173,9 @@ export async function parseResumeHybrid(
     ...chunks.skills,
     ...chunks.achievements,
     ...chunks.certifications,
-  ], rawText);
+  ], normalizedText);
 
-  const summary = extractSummary(chunks.summary, rawText);
+  const summary = extractSummary(chunks.summary, normalizedText);
 
   const projects = extractProjects(chunks.projects);
   const certifications = extractCertifications(chunks.certifications);
