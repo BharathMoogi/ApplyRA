@@ -1,0 +1,6 @@
+ml-service/
+ml-service/model/
+model/
+*.safetensors
+*.bin
+checkpoint-*/
