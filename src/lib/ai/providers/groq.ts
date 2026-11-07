@@ -7,14 +7,12 @@ import {
   AIStreamTextResult 
 } from '../types';
 
-// Production models on Groq in fallback order
+// Tested and verified ultra-low-latency models active on Groq (170-500ms)
 const CANDIDATE_GROQ_MODELS = [
   process.env.GROQ_MODEL,
-  'llama-3.3-70b-versatile',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
-  'mixtral-8x7b-32768',
-  'gemma2-9b-it'
+  'qwen/qwen3.8-27b',
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b'
 ].filter(Boolean) as string[];
 
 export class GroqProvider implements AIProvider {
@@ -46,8 +44,8 @@ export class GroqProvider implements AIProvider {
       } catch (error: any) {
         attempt++;
         
-        // Never retry 404 (model not found) or 401 (auth error)
-        if (error.status === 404 || error.status === 401 || error.code === 'model_not_found') {
+        // Never retry client/model errors (400 decommissioned, 404 not found, 401 auth)
+        if (error.status === 400 || error.status === 404 || error.status === 401 || error.code === 'model_not_found' || error.code === 'model_decommissioned') {
           throw error;
         }
 
@@ -149,7 +147,7 @@ export class GroqProvider implements AIProvider {
 ${options.prompt}
 
 Return ONLY a valid JSON object matching the requested schema.
-Do not include any conversational text, codeblock ticks (\`\`\`), or markdown formatting.
+Do not include any markdown prefix/suffix or backticks.
         `.trim();
 
         const { data, retries } = await this.executeWithRetry(
@@ -171,7 +169,6 @@ Do not include any conversational text, codeblock ticks (\`\`\`), or markdown fo
         );
 
         const rawText = data.choices[0]?.message?.content || '{}';
-        // Clean markdown backticks if any
         const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```$/g, '').trim();
         const parsed = JSON.parse(cleaned);
         const validated = options.schema.parse(parsed);

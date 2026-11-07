@@ -17,7 +17,7 @@ async function generateObjectWithRetry<T>(
   schema: any,
   retries = 2
 ): Promise<T> {
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   let attempt = 0;
   while (attempt <= retries) {
     try {
