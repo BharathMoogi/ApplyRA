@@ -11,9 +11,9 @@ import {
 // Fallback models in priority order for standard generateContent endpoints
 const CANDIDATE_MODELS = [
   process.env.GEMINI_MODEL,
-  'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-1.5-flash',
+  'gemini-2.5-pro',
+  'gemini-2.0-flash-exp',
+  'gemini-flash-latest'
 ].filter(Boolean) as string[];
 
 export class GeminiProvider implements AIProvider {
@@ -33,7 +33,7 @@ export class GeminiProvider implements AIProvider {
           system: options.systemPrompt,
           temperature: options.temperature,
           maxOutputTokens: options.maxTokens,
-          abortSignal: AbortSignal.timeout(options.timeoutMs || 15000),
+          abortSignal: AbortSignal.timeout(options.timeoutMs || 10000),
         });
 
         const latencyMs = Date.now() - startTime;
@@ -78,7 +78,7 @@ export class GeminiProvider implements AIProvider {
           system: options.systemPrompt,
           temperature: options.temperature,
           maxOutputTokens: options.maxTokens,
-          abortSignal: AbortSignal.timeout(options.timeoutMs || 18000),
+          abortSignal: AbortSignal.timeout(options.timeoutMs || 10000),
         });
 
         const latencyMs = Date.now() - startTime;
@@ -117,7 +117,7 @@ export class GeminiProvider implements AIProvider {
         system: options.systemPrompt,
         temperature: options.temperature,
         maxOutputTokens: options.maxTokens,
-        abortSignal: AbortSignal.timeout(options.timeoutMs || 25000),
+        abortSignal: AbortSignal.timeout(options.timeoutMs || 20000),
       });
 
       return {

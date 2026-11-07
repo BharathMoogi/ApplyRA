@@ -7,6 +7,16 @@ import {
   AIStreamTextResult 
 } from '../types';
 
+// Production models on Groq in fallback order
+const CANDIDATE_GROQ_MODELS = [
+  process.env.GROQ_MODEL,
+  'llama-3.3-70b-versatile',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'mixtral-8x7b-32768',
+  'gemma2-9b-it'
+].filter(Boolean) as string[];
+
 export class GroqProvider implements AIProvider {
   readonly name = 'groq';
   private client: Groq | null = null;
@@ -25,8 +35,8 @@ export class GroqProvider implements AIProvider {
 
   private async executeWithRetry<T>(
     operation: (attempt: number) => Promise<T>,
-    maxRetries = 3,
-    initialDelay = 1000
+    maxRetries = 2,
+    initialDelay = 500
   ): Promise<{ data: T; retries: number }> {
     let attempt = 0;
     while (attempt <= maxRetries) {
@@ -35,6 +45,12 @@ export class GroqProvider implements AIProvider {
         return { data, retries: attempt };
       } catch (error: any) {
         attempt++;
+        
+        // Never retry 404 (model not found) or 401 (auth error)
+        if (error.status === 404 || error.status === 401 || error.code === 'model_not_found') {
+          throw error;
+        }
+
         console.warn(`[AI Groq Provider] Attempt ${attempt} failed: ${error.message || error}`);
         
         if (attempt > maxRetries) {
@@ -48,13 +64,8 @@ export class GroqProvider implements AIProvider {
             const seconds = parseFloat(retryAfter);
             if (!isNaN(seconds)) {
               delay = Math.ceil(seconds * 1000);
-              console.log(`[AI Groq Provider] Rate limited (429). Retrying after ${seconds}s based on header.`);
             }
-          } else {
-            console.log(`[AI Groq Provider] Rate limited (429). Retrying with backoff delay of ${delay}ms.`);
           }
-        } else {
-          console.log(`[AI Groq Provider] Retrying in ${delay}ms...`);
         }
 
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -65,86 +76,88 @@ export class GroqProvider implements AIProvider {
 
   async generateText(options: AIGenerateTextOptions): Promise<AIResponse<string>> {
     const startTime = Date.now();
-    const model = options.model || 'llama-3.1-8b-instant';
-    const timeout = options.timeoutMs || 30000;
+    const modelsToTry = options.model ? [options.model] : CANDIDATE_GROQ_MODELS;
+    const timeout = options.timeoutMs || 20000;
+    let lastError: any = null;
 
-    try {
-      const client = this.getClient();
-      
-      const { data, retries } = await this.executeWithRetry(
-        async () => {
-          return client.chat.completions.create({
-            model,
-            max_tokens: options.maxTokens || 4000,
-            temperature: options.temperature ?? 0.7,
-            messages: [
-              ...(options.systemPrompt ? [{ role: 'system' as const, content: options.systemPrompt }] : []),
-              { role: 'user' as const, content: options.prompt }
-            ],
-          }, {
-            timeout,
-          });
-        },
-        options.maxRetries ?? 3
-      );
+    const client = this.getClient();
 
-      const text = data.choices[0]?.message?.content || '';
-      const latencyMs = Date.now() - startTime;
-
-      console.log(`[AI Groq Provider] Text generation successful. Latency: ${latencyMs}ms. Retries: ${retries}`);
-
-      return {
-        success: true,
-        data: text,
-        metadata: {
-          model,
-          tokensUsed: data.usage?.total_tokens,
-          latencyMs,
-          retries,
-        }
-      };
-    } catch (error: any) {
-      console.error('[AI Groq Provider] generateText failed:', error);
-      return {
-        success: false,
-        data: '',
-        error: error.message || String(error),
-        metadata: {
-          model,
-          latencyMs: Date.now() - startTime,
-        }
-      };
-    }
-  }
-
-  async generateObject<T>(options: AIGenerateObjectOptions): Promise<AIResponse<T>> {
-    const startTime = Date.now();
-    const model = options.model || 'llama-3.1-8b-instant';
-    const timeout = options.timeoutMs || 30000;
-    const maxValidationRetries = options.maxRetries || 3;
-
-    let validationAttempt = 0;
-    let lastErrorFeedback = '';
-
-    while (validationAttempt <= maxValidationRetries) {
-      const enhancedPrompt = `
-        ${options.prompt}
-        
-        Return ONLY a valid JSON object matching the requested schema. 
-        Do not include any conversational prefix/suffix or markdown styling.
-
-        ${lastErrorFeedback ? `\n\nCRITICAL: Your previous response failed validation with error: "${lastErrorFeedback}". Please correct this in your new JSON output.` : ''}
-      `;
-
+    for (const model of modelsToTry) {
       try {
-        const client = this.getClient();
-        
+        console.log(`[AI Groq Provider] Attempting generateText with model: ${model}`);
         const { data, retries } = await this.executeWithRetry(
           async () => {
             return client.chat.completions.create({
               model,
               max_tokens: options.maxTokens || 4000,
-              temperature: options.temperature ?? 0.3,
+              temperature: options.temperature ?? 0.7,
+              messages: [
+                ...(options.systemPrompt ? [{ role: 'system' as const, content: options.systemPrompt }] : []),
+                { role: 'user' as const, content: options.prompt }
+              ],
+            }, {
+              timeout,
+            });
+          },
+          1
+        );
+
+        const text = data.choices[0]?.message?.content || '';
+        const latencyMs = Date.now() - startTime;
+
+        return {
+          success: true,
+          data: text,
+          metadata: {
+            model,
+            tokensUsed: data.usage?.total_tokens,
+            latencyMs,
+            retries,
+          }
+        };
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`[AI Groq Provider] Model ${model} failed: ${error.message || error}`);
+      }
+    }
+
+    console.error('[AI Groq Provider] generateText failed across all candidate models:', lastError);
+    return {
+      success: false,
+      data: '',
+      error: lastError?.message || String(lastError),
+      metadata: {
+        model: modelsToTry[0],
+        latencyMs: Date.now() - startTime,
+      }
+    };
+  }
+
+  async generateObject<T>(options: AIGenerateObjectOptions): Promise<AIResponse<T>> {
+    const startTime = Date.now();
+    const modelsToTry = options.model ? [options.model] : CANDIDATE_GROQ_MODELS;
+    const timeout = options.timeoutMs || 25000;
+    let lastError: any = null;
+
+    const client = this.getClient();
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[AI Groq Provider] Attempting generateObject with model: ${model}`);
+
+        const enhancedPrompt = `
+${options.prompt}
+
+Return ONLY a valid JSON object matching the requested schema.
+Do not include any conversational text, codeblock ticks (\`\`\`), or markdown formatting.
+        `.trim();
+
+        const { data, retries } = await this.executeWithRetry(
+          async () => {
+            return client.chat.completions.create({
+              model,
+              max_tokens: options.maxTokens || 4000,
+              temperature: options.temperature ?? 0.2,
               response_format: { type: "json_object" },
               messages: [
                 { role: 'system' as const, content: options.systemPrompt || "You are a precise JSON generator. Output valid JSON matching the requested schema." },
@@ -154,13 +167,17 @@ export class GroqProvider implements AIProvider {
               timeout,
             });
           },
-          3
+          1
         );
 
-        const text = data.choices[0]?.message?.content || '';
-        const parsed = JSON.parse(text);
+        const rawText = data.choices[0]?.message?.content || '{}';
+        // Clean markdown backticks if any
+        const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```$/g, '').trim();
+        const parsed = JSON.parse(cleaned);
         const validated = options.schema.parse(parsed);
         const latencyMs = Date.now() - startTime;
+
+        console.log(`[AI Groq Provider] Success with ${model} in ${latencyMs}ms!`);
 
         return {
           success: true,
@@ -169,35 +186,29 @@ export class GroqProvider implements AIProvider {
             model,
             tokensUsed: data.usage?.total_tokens,
             latencyMs,
-            retries: validationAttempt + retries,
+            retries,
           }
         };
       } catch (error: any) {
-        validationAttempt++;
-        lastErrorFeedback = error.message || String(error);
-        console.warn(`[AI Groq Provider] JSON generation/validation attempt ${validationAttempt} failed: ${lastErrorFeedback}`);
-        
-        if (validationAttempt > maxValidationRetries) {
-          return {
-            success: false,
-            data: {} as T,
-            error: `Groq JSON validation failed after ${maxValidationRetries} correction attempts. Last error: ${lastErrorFeedback}`,
-            metadata: {
-              model,
-              latencyMs: Date.now() - startTime,
-            }
-          };
-        }
-        
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        lastError = error;
+        console.warn(`[AI Groq Provider] Model ${model} failed generateObject: ${error.message || error}`);
       }
     }
 
-    throw new Error("Validation loop exited unexpectedly");
+    console.error('[AI Groq Provider] generateObject failed across all candidate models:', lastError);
+    return {
+      success: false,
+      data: {} as T,
+      error: lastError?.message || String(lastError),
+      metadata: {
+        model: modelsToTry[0],
+        latencyMs: Date.now() - startTime,
+      }
+    };
   }
 
   async streamText(options: AIGenerateTextOptions): Promise<AIResponse<AIStreamTextResult>> {
-    const model = options.model || 'llama-3.1-8b-instant';
+    const model = options.model || CANDIDATE_GROQ_MODELS[0];
     const timeout = options.timeoutMs || 30000;
 
     try {
