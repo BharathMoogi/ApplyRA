@@ -42,7 +42,30 @@ class AIServiceManager {
   }
 
   get active(): AIProvider {
-    return this.getProvider();
+    const primary = this.getProvider(this.activeProviderName);
+
+    // Resilient proxy: if primary provider encounters an error or timeout,
+    // automatically attempt failover to groq if GROQ_API_KEY is configured
+    return {
+      name: primary.name,
+      generateText: async (options) => {
+        const res = await primary.generateText(options);
+        if (!res.success && this.activeProviderName !== 'groq' && process.env.GROQ_API_KEY) {
+          console.warn(`[AI Failover] Primary provider '${primary.name}' failed. Falling back to Groq...`);
+          return this.getProvider('groq').generateText(options);
+        }
+        return res;
+      },
+      generateObject: async <T>(options: any) => {
+        const res = await primary.generateObject<T>(options);
+        if (!res.success && this.activeProviderName !== 'groq' && process.env.GROQ_API_KEY) {
+          console.warn(`[AI Failover] Primary provider '${primary.name}' failed. Falling back to Groq...`);
+          return this.getProvider('groq').generateObject<T>(options);
+        }
+        return res;
+      },
+      streamText: (options) => primary.streamText(options),
+    };
   }
 }
 
