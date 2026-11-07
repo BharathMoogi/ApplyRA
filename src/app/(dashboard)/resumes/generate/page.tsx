@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loading } from "@/components/shared/loading";
 import { Sparkles, FileText, Download, Wand2, CheckCircle2, ChevronRight, Mail, Phone, Globe, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 
+export const maxDuration = 60;
+
 interface ResumeVersion {
   id: string;
   title: string;
@@ -61,6 +63,7 @@ export default function ResumeGeneratorPage() {
     }
 
     setIsGenerating(true);
+    setGenerationResult(null);
     try {
       const res = await generateCustomizedResume(selectedResumeId, jobDescription);
       if (res.success && res.result) {
@@ -68,9 +71,9 @@ export default function ResumeGeneratorPage() {
       } else {
         alert(res.error || "Failed to generate tailored resume.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("An error occurred during resume generation.");
+      alert(err?.message || "An error occurred during resume generation. Please try again.");
     } finally {
       setIsGenerating(false);
     }
