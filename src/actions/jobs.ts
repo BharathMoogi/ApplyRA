@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { defaultJobAggregator } from "@/lib/jobs/connectors/aggregator";
 import { extractResumeSummary } from "@/lib/jobs/query-generator";
-import {
+import type {
   JobListing,
   JobSearchFilters,
   ExtractedResumeSummary,
@@ -13,7 +13,7 @@ import {
   WorkMode,
 } from "@/lib/jobs/types";
 
-export type { JobListing, JobSearchFilters, ExtractedResumeSummary, ExperienceLevel, WorkMode };
+export type { JobListing, JobSearchFilters, ExtractedResumeSummary, ExperienceLevel, WorkMode } from "@/lib/jobs/types";
 
 // Helper to get authenticated profile
 async function getAuthenticatedProfile() {

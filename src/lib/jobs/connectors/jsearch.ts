@@ -1,4 +1,4 @@
-import { JobConnector, RawJobListing, JobSearchFilters, ExperienceLevel } from "../types";
+import type { JobConnector, RawJobListing, JobSearchFilters, ExperienceLevel } from "../types";
 
 export class JSearchConnector implements JobConnector {
   id = "jsearch";

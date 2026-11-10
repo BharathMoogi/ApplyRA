@@ -1,4 +1,4 @@
-import { JobConnector, RawJobListing, JobListing, JobSearchFilters, ExtractedResumeSummary } from "../types";
+import type { JobConnector, RawJobListing, JobListing, JobSearchFilters, ExtractedResumeSummary } from "../types";
 import { JSearchConnector } from "./jsearch";
 import { MockJobConnector, MOCK_JOB_LISTINGS } from "./mock";
 import { calculateJobMatch } from "../matcher";

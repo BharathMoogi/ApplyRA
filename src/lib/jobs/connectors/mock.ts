@@ -1,4 +1,4 @@
-import { JobConnector, RawJobListing, JobSearchFilters } from "../types";
+import type { JobConnector, RawJobListing, JobSearchFilters } from "../types";
 
 export const MOCK_JOB_LISTINGS: RawJobListing[] = [
   {

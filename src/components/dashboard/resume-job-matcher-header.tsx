@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getResumes, uploadResume } from "@/actions/resumes";
-import { ExtractedResumeSummary } from "@/lib/jobs/types";
+import type { ExtractedResumeSummary } from "@/lib/jobs/types";
 import {
   FileText,
   UploadCloud,

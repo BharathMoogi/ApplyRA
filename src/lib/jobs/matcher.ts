@@ -1,4 +1,4 @@
-import { RawJobListing, ExtractedResumeSummary, ExperienceLevel } from "./types";
+import type { RawJobListing, ExtractedResumeSummary, ExperienceLevel } from "./types";
 
 export interface MatchResult {
   score: number; // 0 - 100 estimated fit

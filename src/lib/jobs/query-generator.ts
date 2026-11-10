@@ -1,4 +1,4 @@
-import { ExtractedResumeSummary, ExperienceLevel } from "./types";
+import type { ExtractedResumeSummary, ExperienceLevel } from "./types";
 
 // Match only what we need from StructuredResumeData to avoid circular import
 interface LocalResumeSkills {
