@@ -1,3 +1,6 @@
+// Job types — these must be runtime-compatible for Turbopack app-rsc context
+// (avoid pure interface-only modules; add at least one runtime export)
+
 export type ExperienceLevel = "Fresher" | "Entry" | "Mid" | "Senior" | "Lead" | "Not Disclosed";
 
 export type WorkMode = "Remote" | "Hybrid" | "On-site" | "All";
@@ -14,9 +17,9 @@ export interface JobListing {
   remote: boolean;
   skills: string[];
   description: string;
-  atsScore: number; // 0 - 100 estimated relevance score
+  atsScore: number;
   postedAt: string;
-  source: string; // e.g. "LinkedIn", "Indeed", "Glassdoor", "JSearch"
+  source: string;
   jobUrl: string;
   matchingSkills?: string[];
   missingSkills?: string[];
@@ -25,7 +28,7 @@ export interface JobListing {
 
 export interface JobSearchFilters {
   location?: string;
-  experience?: string; // "all" | "Fresher" | "0-1" | "1-3" | "3-5" | "5+"
+  experience?: string;
   workMode?: WorkMode;
   remote?: boolean;
   company?: string;
@@ -75,3 +78,6 @@ export interface ExtractedResumeSummary {
   certifications: string[];
   generatedQueries: string[];
 }
+
+// Runtime sentinel — required for Turbopack app-rsc to recognise this module's exports
+export const JOB_TYPES_VERSION = "1" as const;
