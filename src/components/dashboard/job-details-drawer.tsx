@@ -13,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sparkles,
   MapPin,
-  DollarSign,
+  Banknote,
   Calendar,
   Send,
   Loader2,
@@ -141,7 +141,7 @@ export function JobDetailsDrawer({
               <p className="text-xs font-semibold mt-0.5">{job.location}</p>
             </div>
             <div className="border border-muted/50 rounded-xl p-3 bg-muted/5">
-              <DollarSign className="h-4 w-4 text-primary mx-auto mb-1" />
+              <Banknote className="h-4 w-4 text-primary mx-auto mb-1" />
               <h5 className="text-[10px] text-muted-foreground uppercase font-bold">Salary</h5>
               <p className="text-xs font-semibold mt-0.5">{job.salary}</p>
             </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bookmark, MapPin, DollarSign, Loader2, Sparkles, MonitorCheck, Building2, Clock, ExternalLink } from "lucide-react";
+import { Bookmark, MapPin, Banknote, Loader2, Sparkles, Building2, Clock } from "lucide-react";
 import { toggleBookmarkJob, type JobListing } from "@/actions/jobs";
 
 interface JobCardProps {
@@ -100,14 +100,14 @@ export function JobCard({ job, isBookmarked, onBookmarkToggle, onClick, hasResum
 
       <CardContent className="pb-4 pt-0 px-5 space-y-3">
         {/* Info badges */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-medium">
-          <span className="flex items-center gap-1 truncate max-w-[180px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground font-medium">
+          <span className="flex items-center gap-1 min-w-0">
             <MapPin className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{job.location}</span>
+            <span className="truncate max-w-[220px]">{job.location}</span>
           </span>
-          <span className="flex items-center gap-0.5 truncate max-w-[160px]">
-            <DollarSign className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{job.salary}</span>
+          <span className="flex items-center gap-1">
+            <Banknote className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">{job.salary}</span>
           </span>
           {job.workMode && job.workMode !== "Not Disclosed" && (
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${workModeBadge[job.workMode] || "bg-muted text-muted-foreground"}`}>
@@ -115,7 +115,7 @@ export function JobCard({ job, isBookmarked, onBookmarkToggle, onClick, hasResum
             </span>
           )}
           {job.experienceYears && (
-            <span className="text-[10px] font-medium text-muted-foreground">
+            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
               {job.experienceYears} exp
             </span>
           )}
