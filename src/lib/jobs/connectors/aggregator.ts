@@ -111,8 +111,30 @@ export class JobAggregator {
 
     // ─── Filter Processing ──────────────────────────────────────────────────
     if (filters.location && filters.location.trim().length > 0) {
-      const loc = filters.location.toLowerCase();
-      results = results.filter((j) => j.location.toLowerCase().includes(loc));
+      const loc = filters.location.toLowerCase().trim();
+      const segments = loc.split(",").map((s) => s.trim()).filter((s) => s.length >= 2);
+      const expandedTerms = new Set<string>([loc, ...segments]);
+      if (loc.includes("bengaluru") || loc.includes("bangalore")) {
+        expandedTerms.add("bengaluru");
+        expandedTerms.add("bangalore");
+      }
+      if (loc.includes("united states") || loc.includes("usa") || loc.includes("u.s.")) {
+        expandedTerms.add("united states");
+        expandedTerms.add("usa");
+      }
+      if (loc.includes("united kingdom") || loc.includes("uk") || loc.includes("u.k.")) {
+        expandedTerms.add("united kingdom");
+        expandedTerms.add("uk");
+      }
+
+      results = results.filter((j) => {
+        const jLoc = j.location.toLowerCase();
+        if (jLoc.includes(loc) || loc.includes(jLoc)) return true;
+        for (const term of expandedTerms) {
+          if (term.length >= 3 && jLoc.includes(term)) return true;
+        }
+        return false;
+      });
     }
 
     if (filters.workMode && filters.workMode !== "All") {

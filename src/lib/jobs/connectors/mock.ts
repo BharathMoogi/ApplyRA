@@ -101,7 +101,7 @@ export const MOCK_JOB_LISTINGS: RawJobListing[] = [
     id: "job-7",
     title: "Software Engineer (Backend & Cloud)",
     company: "Datadog",
-    location: "Bengaluru, India",
+    location: "Bengaluru, Karnataka, India",
     salary: "Not Disclosed",
     experience: "Entry",
     experienceYears: "1-2 yrs",
@@ -112,6 +112,38 @@ export const MOCK_JOB_LISTINGS: RawJobListing[] = [
     postedAt: "1 week ago",
     source: "LinkedIn",
     jobUrl: "https://datadog.com/careers/software-engineer",
+  },
+  {
+    id: "job-8",
+    title: "Full Stack Engineer (AI Platforms)",
+    company: "DeepMind",
+    location: "London, England, United Kingdom",
+    salary: "£95,000 - £125,000",
+    experience: "Mid",
+    experienceYears: "3-5 yrs",
+    workMode: "Hybrid",
+    remote: false,
+    skills: ["TypeScript", "React", "Python", "GCP", "PyTorch"],
+    description: "Build user-facing interfaces and experimentation platforms for advanced machine learning models at Google DeepMind London.",
+    postedAt: "3 days ago",
+    source: "LinkedIn",
+    jobUrl: "https://deepmind.google/careers/fullstack-engineer-london",
+  },
+  {
+    id: "job-9",
+    title: "Cloud Software Engineer",
+    company: "Microsoft",
+    location: "Hyderabad, Telangana, India",
+    salary: "₹18,00,000 - ₹28,00,000",
+    experience: "Mid",
+    experienceYears: "2-4 yrs",
+    workMode: "Hybrid",
+    remote: false,
+    skills: ["C#", ".NET", "Azure", "React", "SQL"],
+    description: "Join Microsoft IDC in Hyderabad. Collaborate on mission-critical Azure cloud services and enterprise infrastructure products.",
+    postedAt: "2 days ago",
+    source: "LinkedIn",
+    jobUrl: "https://careers.microsoft.com/us/en/job/hyderabad-cloud-dev",
   },
 ];
 
@@ -134,9 +166,31 @@ export class MockJobConnector implements JobConnector {
       });
     }
 
-    if (filters.location) {
-      const loc = filters.location.toLowerCase();
-      filtered = filtered.filter((j) => j.location.toLowerCase().includes(loc));
+    if (filters.location && filters.location.trim().length > 0) {
+      const loc = filters.location.toLowerCase().trim();
+      const segments = loc.split(",").map((s) => s.trim()).filter((s) => s.length >= 2);
+      const expandedTerms = new Set<string>([loc, ...segments]);
+      if (loc.includes("bengaluru") || loc.includes("bangalore")) {
+        expandedTerms.add("bengaluru");
+        expandedTerms.add("bangalore");
+      }
+      if (loc.includes("united states") || loc.includes("usa") || loc.includes("u.s.")) {
+        expandedTerms.add("united states");
+        expandedTerms.add("usa");
+      }
+      if (loc.includes("united kingdom") || loc.includes("uk") || loc.includes("u.k.")) {
+        expandedTerms.add("united kingdom");
+        expandedTerms.add("uk");
+      }
+
+      filtered = filtered.filter((j) => {
+        const jLoc = j.location.toLowerCase();
+        if (jLoc.includes(loc) || loc.includes(jLoc)) return true;
+        for (const term of expandedTerms) {
+          if (term.length >= 3 && jLoc.includes(term)) return true;
+        }
+        return false;
+      });
     }
 
     if (filters.remote || filters.workMode === "Remote") {

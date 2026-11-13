@@ -11,6 +11,7 @@ import {
 import { JobCard } from "@/components/dashboard/job-card";
 import { JobDetailsDrawer } from "@/components/dashboard/job-details-drawer";
 import { ResumeJobMatcherHeader } from "@/components/dashboard/resume-job-matcher-header";
+import { LocationAutocomplete } from "@/components/dashboard/location-autocomplete";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/shared/loading";
@@ -297,16 +298,15 @@ export default function JobSearchPage() {
         <div className="mb-5 p-4 border rounded-xl bg-muted/20 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
 
-            {/* Location */}
+            {/* Location Autocomplete */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" /> Location
               </label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="City, state, or remote"
+              <LocationAutocomplete
                 value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
+                onChange={setLocationFilter}
+                placeholder="City, state, or country"
               />
             </div>
 
@@ -390,36 +390,42 @@ export default function JobSearchPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-1 border-t">
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => {
-                const newFilters: JobSearchFilters = {
-                  location: locationFilter,
-                  experience: expFilter,
-                  workMode: workModeFilter,
-                  minMatchScore: minMatchFilter,
-                  source: sourceFilter,
-                  sortBy,
-                  datePosted: dateFilter,
-                };
-                setPage(1);
-                setAppliedFilters(newFilters);
-              }}
-            >
-              Apply Filters
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs gap-1"
-              onClick={handleResetFilters}
-            >
-              <X className="h-3 w-3" /> Reset
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  const newFilters: JobSearchFilters = {
+                    location: locationFilter,
+                    experience: expFilter,
+                    workMode: workModeFilter,
+                    minMatchScore: minMatchFilter,
+                    source: sourceFilter,
+                    sortBy,
+                    datePosted: dateFilter,
+                  };
+                  setPage(1);
+                  setAppliedFilters(newFilters);
+                }}
+              >
+                Apply Filters
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={handleResetFilters}
+              >
+                <X className="h-3 w-3" /> Reset
+              </Button>
+            </div>
+
+            <span className="text-[10px] text-muted-foreground/70">
+              Location data &bull; &copy; OpenStreetMap contributors
+            </span>
           </div>
         </div>
       )}
