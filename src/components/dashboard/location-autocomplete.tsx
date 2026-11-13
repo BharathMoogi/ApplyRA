@@ -4,19 +4,110 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin, Loader2, X } from "lucide-react";
 
+export interface LocationStructuredDetails {
+  name?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  countryCode?: string;
+  coordinates?: [number, number]; // [lng, lat]
+}
+
 export interface LocationSuggestion {
   id: string;
-  primary: string;
-  secondary: string;
-  fullValue: string;
-  countryCode?: string;
+  primary: string; // e.g. "Bengaluru"
+  secondary: string; // e.g. "Karnataka, India"
+  fullValue: string; // e.g. "Bengaluru, Karnataka, India"
+  details: LocationStructuredDetails;
 }
 
 interface LocationAutocompleteProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, details?: LocationStructuredDetails) => void;
   placeholder?: string;
   className?: string;
+}
+
+// POI keys to filter out from city search
+const EXCLUDED_OSM_KEYS = new Set([
+  "amenity", // universities, colleges, schools, hospitals, prisons, cafes
+  "historic", // forts, castles, ruins, monuments
+  "building", // individual buildings
+  "shop", // retail stores
+  "tourism", // hotels, museums, attractions
+  "leisure", // sports centres, parks, playgrounds
+  "highway", // roads, bus stops
+  "railway", // stations, platforms
+  "office", // corporate offices
+  "craft", // workshops
+  "landuse", // industrial zones
+  "aeroway", // hangars
+]);
+
+const EXCLUDED_TYPES = new Set(["house", "street"]);
+
+/**
+ * Validates whether an OSM feature represents an actual city, town, administrative region, or place
+ * rather than an individual point of interest (POI) like a university, fort, or hospital.
+ */
+function isCityOrPlace(feature: any): boolean {
+  const props = feature?.properties || {};
+
+  // Exclude explicitly banned keys and types
+  if (props.osm_key && EXCLUDED_OSM_KEYS.has(props.osm_key.toLowerCase())) {
+    return false;
+  }
+  if (props.type && EXCLUDED_TYPES.has(props.type.toLowerCase())) {
+    return false;
+  }
+
+  // Recognized place types
+  if (props.osm_key === "place") {
+    return true;
+  }
+  if (["city", "district", "state", "country", "county", "locality"].includes(props.type?.toLowerCase())) {
+    return true;
+  }
+  if (
+    props.osm_key === "boundary" &&
+    (props.osm_value === "administrative" || props.osm_value === "political")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Calculates a relevance score prioritizing city-level places and exact/prefix name matches
+ */
+function getFeatureRank(feature: any, query: string): number {
+  const p = feature?.properties || {};
+  const name = (p.name || "").toLowerCase();
+  const q = query.toLowerCase();
+  let score = 0;
+
+  // Exact or prefix name matching
+  if (name === q) {
+    score += 100;
+  } else if (name.startsWith(q)) {
+    score += 50;
+  } else if (p.county && p.county.toLowerCase().includes(q)) {
+    score += 40;
+  }
+
+  // Hierarchy prioritization: cities and towns first
+  if (p.osm_value === "city" || p.type === "city") {
+    score += 30;
+  } else if (p.osm_value === "town" || p.osm_value === "municipality") {
+    score += 20;
+  } else if (p.osm_value === "country" || p.type === "country") {
+    score += 15;
+  } else if (p.osm_value === "state" || p.type === "state" || p.type === "district") {
+    score += 10;
+  }
+
+  return score;
 }
 
 export function LocationAutocomplete({
@@ -52,23 +143,25 @@ export function LocationAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Format Photon properties into clean location segments
+  // Format Photon feature into clean display structure
   const formatSuggestion = useCallback(
     (feature: any, index: number): LocationSuggestion => {
       const props = feature.properties || {};
+      const coords = feature.geometry?.coordinates as [number, number] | undefined;
+
       const name = props.name || props.city || "";
-      const parts: string[] = [];
+      const secondaryParts: string[] = [];
 
       if (props.state && props.state.toLowerCase() !== name.toLowerCase()) {
-        parts.push(props.state);
+        secondaryParts.push(props.state);
       }
       if (props.country) {
-        parts.push(props.country);
+        secondaryParts.push(props.country);
       }
 
-      const secondary = parts.join(", ");
-      const fullParts = [name, ...parts].filter(Boolean);
-      // Deduplicate consecutive or repeating tokens while preserving order
+      const secondary = secondaryParts.join(", ");
+      const fullParts = [name, ...secondaryParts].filter(Boolean);
+      // Deduplicate consecutive tokens while preserving order
       const uniqueParts = fullParts.filter(
         (item, idx) => fullParts.findIndex((p) => p.toLowerCase() === item.toLowerCase()) === idx
       );
@@ -81,17 +174,24 @@ export function LocationAutocomplete({
         primary: name,
         secondary,
         fullValue,
-        countryCode: props.countrycode,
+        details: {
+          name,
+          city: props.city || (props.type === "city" || props.osm_value === "city" ? name : undefined),
+          state: props.state,
+          country: props.country,
+          countryCode: props.countrycode,
+          coordinates: coords,
+        },
       };
     },
     []
   );
 
-  // Debounced fetch from Photon API
+  // Debounced fetch with city-layer prioritization and graceful fallback
   useEffect(() => {
     const trimmed = inputValue.trim();
 
-    // Less than 2 characters: reset suggestions and do not query
+    // Require at least 2 characters
     if (trimmed.length < 2) {
       setSuggestions([]);
       setIsLoading(false);
@@ -99,7 +199,7 @@ export function LocationAutocomplete({
       return;
     }
 
-    // Check in-memory cache first to avoid redundant requests
+    // Check memory cache
     const cacheKey = trimmed.toLowerCase();
     if (cacheRef.current.has(cacheKey)) {
       setSuggestions(cacheRef.current.get(cacheKey) || []);
@@ -108,7 +208,7 @@ export function LocationAutocomplete({
       return;
     }
 
-    // Cancel any previous in-flight request
+    // Cancel in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -121,24 +221,58 @@ export function LocationAutocomplete({
 
     const debounceTimer = setTimeout(async () => {
       try {
-        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=7&lang=en`;
-        const res = await fetch(url, { signal: controller.signal });
+        let features: any[] = [];
 
-        if (!res.ok) {
-          throw new Error(`Photon API returned ${res.status}`);
+        // 1. Primary search: target city-level locations using Photon's layer=city filter
+        const cityUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=10&lang=en&layer=city`;
+        const cityRes = await fetch(cityUrl, { signal: controller.signal });
+
+        if (cityRes.ok) {
+          const cityData = await cityRes.json();
+          const rawCityFeatures = Array.isArray(cityData.features) ? cityData.features : [];
+          features = rawCityFeatures.filter(isCityOrPlace);
         }
 
-        const data = await res.json();
+        // 2. Fallback search: if city-only returns fewer than 5 results, query without layer filter
+        // while strictly excluding POIs (universities, forts, hospitals, shops, etc.)
+        if (features.length < 5 && !controller.signal.aborted) {
+          try {
+            const allUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=10&lang=en`;
+            const allRes = await fetch(allUrl, { signal: controller.signal });
+            if (allRes.ok) {
+              const allData = await allRes.json();
+              const rawAll = Array.isArray(allData.features) ? allData.features : [];
+              const filteredFallback = rawAll.filter(isCityOrPlace);
 
-        // Check if a newer request has been triggered since this one began
+              // Merge without duplicates
+              const seenOsmIds = new Set(features.map((f) => f.properties?.osm_id).filter(Boolean));
+              for (const f of filteredFallback) {
+                const id = f.properties?.osm_id;
+                if (!id || !seenOsmIds.has(id)) {
+                  features.push(f);
+                  if (id) seenOsmIds.add(id);
+                }
+              }
+            }
+          } catch (fallbackErr: any) {
+            // Ignore fallback error if city query already yielded results
+            if (features.length === 0 && fallbackErr.name !== "AbortError") {
+              console.warn("[LocationAutocomplete] Fallback error:", fallbackErr);
+            }
+          }
+        }
+
+        // Verify request freshness
         if (currentRequestId !== latestRequestIdRef.current) {
           return;
         }
 
-        const features = Array.isArray(data.features) ? data.features : [];
-        const parsed: LocationSuggestion[] = features.map((f: any, idx: number) =>
-          formatSuggestion(f, idx)
-        );
+        // 3. Rank results: Prioritize city places and exact/prefix matches
+        features.sort((a, b) => getFeatureRank(b, trimmed) - getFeatureRank(a, trimmed));
+
+        const parsed: LocationSuggestion[] = features
+          .slice(0, 7)
+          .map((f: any, idx: number) => formatSuggestion(f, idx));
 
         // Deduplicate suggestions by fullValue
         const seenValues = new Set<string>();
@@ -149,7 +283,7 @@ export function LocationAutocomplete({
           return true;
         });
 
-        // Store in cache
+        // Cache result
         cacheRef.current.set(cacheKey, deduped);
 
         setSuggestions(deduped);
@@ -157,7 +291,6 @@ export function LocationAutocomplete({
       } catch (err: any) {
         if (err.name !== "AbortError") {
           console.warn("[LocationAutocomplete] Fetch error:", err?.message || err);
-          // Gracefully fallback to empty suggestions without blocking user
           setSuggestions([]);
           setHasSearched(true);
         }
@@ -182,7 +315,7 @@ export function LocationAutocomplete({
 
   const handleSelectSuggestion = (suggestion: LocationSuggestion) => {
     setInputValue(suggestion.fullValue);
-    onChange(suggestion.fullValue);
+    onChange(suggestion.fullValue, suggestion.details);
     setIsOpen(false);
   };
 
@@ -197,7 +330,6 @@ export function LocationAutocomplete({
     if (e.key === "Escape") {
       setIsOpen(false);
     } else if (e.key === "Enter" && suggestions.length > 0 && isOpen) {
-      // Pick first suggestion on Enter if dropdown is open
       e.preventDefault();
       handleSelectSuggestion(suggestions[0]);
     }
@@ -243,13 +375,13 @@ export function LocationAutocomplete({
             {isLoading && suggestions.length === 0 && (
               <div className="px-3 py-2.5 text-xs text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                <span>Searching worldwide locations...</span>
+                <span>Searching cities worldwide...</span>
               </div>
             )}
 
             {!isLoading && suggestions.length === 0 && hasSearched && (
               <div className="px-3 py-2 text-xs text-muted-foreground">
-                No locations found. Press enter to search &ldquo;{inputValue}&rdquo;.
+                No matching cities found. Press enter to search &ldquo;{inputValue}&rdquo;.
               </div>
             )}
 
@@ -262,7 +394,7 @@ export function LocationAutocomplete({
               >
                 <MapPin className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-foreground truncate">{item.primary}</div>
+                  <div className="font-semibold text-foreground truncate">{item.primary}</div>
                   {item.secondary && (
                     <div className="text-[10px] text-muted-foreground truncate">
                       {item.secondary}

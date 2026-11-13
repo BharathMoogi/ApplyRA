@@ -26,8 +26,18 @@ export interface JobListing {
   matchExplanation?: string;
 }
 
+export interface LocationStructuredDetails {
+  name?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  countryCode?: string;
+  coordinates?: [number, number];
+}
+
 export interface JobSearchFilters {
   location?: string;
+  locationDetails?: LocationStructuredDetails;
   experience?: string;
   workMode?: WorkMode;
   remote?: boolean;

@@ -114,6 +114,15 @@ export class JobAggregator {
       const loc = filters.location.toLowerCase().trim();
       const segments = loc.split(",").map((s) => s.trim()).filter((s) => s.length >= 2);
       const expandedTerms = new Set<string>([loc, ...segments]);
+      if (filters.locationDetails?.city) {
+        expandedTerms.add(filters.locationDetails.city.toLowerCase());
+      }
+      if (filters.locationDetails?.state) {
+        expandedTerms.add(filters.locationDetails.state.toLowerCase());
+      }
+      if (filters.locationDetails?.country) {
+        expandedTerms.add(filters.locationDetails.country.toLowerCase());
+      }
       if (loc.includes("bengaluru") || loc.includes("bangalore")) {
         expandedTerms.add("bengaluru");
         expandedTerms.add("bangalore");

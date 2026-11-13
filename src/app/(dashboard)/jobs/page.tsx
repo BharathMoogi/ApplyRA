@@ -7,6 +7,7 @@ import {
   type JobListing,
   type ExtractedResumeSummary,
   type JobSearchFilters,
+  type LocationStructuredDetails,
 } from "@/actions/jobs";
 import { JobCard } from "@/components/dashboard/job-card";
 import { JobDetailsDrawer } from "@/components/dashboard/job-details-drawer";
@@ -53,6 +54,7 @@ export default function JobSearchPage() {
   // ─── Filter State (staging — not applied until Search is clicked) ────────
   const [showFilters, setShowFilters] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
+  const [locationDetails, setLocationDetails] = useState<LocationStructuredDetails | undefined>(undefined);
   const [expFilter, setExpFilter] = useState<ExpOption>("all");
   const [workModeFilter, setWorkModeFilter] = useState<WorkModeOption>("All");
   const [minMatchFilter, setMinMatchFilter] = useState(0);
@@ -142,6 +144,7 @@ export default function JobSearchPage() {
     setPage(1);
     const newFilters: JobSearchFilters = {
       location: locationFilter,
+      locationDetails,
       experience: expFilter,
       workMode: workModeFilter,
       minMatchScore: minMatchFilter,
@@ -157,6 +160,7 @@ export default function JobSearchPage() {
     setPage(1);
     const newFilters: JobSearchFilters = {
       location: locationFilter,
+      locationDetails,
       experience: expFilter,
       workMode: workModeFilter,
       minMatchScore: minMatchFilter,
@@ -184,6 +188,7 @@ export default function JobSearchPage() {
 
   const handleResetFilters = () => {
     setLocationFilter("");
+    setLocationDetails(undefined);
     setExpFilter("all");
     setWorkModeFilter("All");
     setMinMatchFilter(0);
@@ -192,6 +197,7 @@ export default function JobSearchPage() {
     setDateFilter("all");
     setAppliedFilters({
       location: "",
+      locationDetails: undefined,
       experience: "all",
       workMode: "All",
       minMatchScore: 0,
@@ -305,7 +311,10 @@ export default function JobSearchPage() {
               </label>
               <LocationAutocomplete
                 value={locationFilter}
-                onChange={setLocationFilter}
+                onChange={(val, details) => {
+                  setLocationFilter(val);
+                  setLocationDetails(details);
+                }}
                 placeholder="City, state, or country"
               />
             </div>
@@ -399,6 +408,7 @@ export default function JobSearchPage() {
                 onClick={() => {
                   const newFilters: JobSearchFilters = {
                     location: locationFilter,
+                    locationDetails,
                     experience: expFilter,
                     workMode: workModeFilter,
                     minMatchScore: minMatchFilter,

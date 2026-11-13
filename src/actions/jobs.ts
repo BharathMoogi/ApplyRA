@@ -11,9 +11,10 @@ import type {
   ExtractedResumeSummary,
   ExperienceLevel,
   WorkMode,
+  LocationStructuredDetails,
 } from "@/lib/jobs/types";
 
-export type { JobListing, JobSearchFilters, ExtractedResumeSummary, ExperienceLevel, WorkMode } from "@/lib/jobs/types";
+export type { JobListing, JobSearchFilters, ExtractedResumeSummary, ExperienceLevel, WorkMode, LocationStructuredDetails } from "@/lib/jobs/types";
 
 // Helper to get authenticated profile
 async function getAuthenticatedProfile() {
